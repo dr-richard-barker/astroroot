@@ -44,6 +44,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .regionbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--edge)}
 .regionbar .hint{flex-basis:100%;margin-top:2px}
 #roiResults .datatable{font-size:12px}
+#plantResults .datatable{font-size:12px}
+.scrolly{max-height:220px;overflow:auto;border:1px solid var(--edge);border-radius:8px}
+.scrolly .datatable{margin-top:0}
+.scrolly th{position:sticky;top:0}
 .method{font-size:12px;color:var(--muted);margin-top:12px}
 .datatable{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
 .datatable th,.datatable td{border:1px solid var(--edge);padding:6px 8px;text-align:left}

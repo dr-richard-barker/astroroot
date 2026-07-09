@@ -84,6 +84,13 @@
           <button id="roiClear" class="ghost">Clear</button>
           <div id="roiHint" class="hint">Draw boxes to label roots by area — e.g. one box per genotype.</div>
         </div>
+        <div class="regionbar">
+          <label class="mini">plants <input type="number" id="plantN" min="1" max="200" value="11" style="width:48px"></label>
+          <button id="seedAuto" class="ghost">🌱 Auto-place</button>
+          <button id="seedDraw" class="ghost">Place seeds</button>
+          <button id="seedClear" class="ghost">Clear</button>
+          <div id="seedHint" class="hint">Mark where each seed was sown (the root's starting point) → per-plant traits.</div>
+        </div>
         <h3>Measurements <span class="hint" id="measScope">(whole image)</span></h3>
         <table id="traits">
           <tr><td>Total root length</td><td id="tLen">—</td></tr>
@@ -106,6 +113,11 @@
           <h3 style="margin-top:14px">Per-region</h3>
           <table id="roiTable" class="datatable"></table>
           <button id="roiSaveDb" class="primary" style="margin-top:8px">💾 Save regions to database</button>
+        </div>
+        <div id="plantResults" hidden>
+          <h3 style="margin-top:14px">Per-plant <span class="hint" id="plantCount"></span></h3>
+          <div class="scrolly"><table id="plantTable" class="datatable"></table></div>
+          <button id="plantSaveDb" class="primary" style="margin-top:8px">💾 Save plants to database</button>
         </div>
       </aside>
     </div>

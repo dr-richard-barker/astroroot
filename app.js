@@ -267,6 +267,7 @@ $("runBtn").onclick = async () => {
   redrawOverlay();
   setTraits(traits);
   measureROIs();
+  measurePlants();
   $("methodNote").textContent = ortSession
     ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
@@ -529,6 +530,13 @@ function redrawOverlay(){
   }
   if(roiDrag){ const {x0,y0,x1,y1}=roiDrag; c.strokeStyle="#f0b429"; c.setLineDash([5,4]);
     c.strokeRect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0),Math.abs(y1-y0)); c.setLineDash([]); }
+  seeds.forEach((s,i)=>{                                     // numbered seed points (root origins)
+    const x=s.x*octx.width, y=s.y*octx.height;
+    c.fillStyle="#3fb950"; c.strokeStyle="#0d1117"; c.lineWidth=1.5;
+    c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.stroke();
+    c.fillStyle="#fff"; c.font="bold 9px system-ui"; c.textAlign="center"; c.textBaseline="middle";
+    c.fillText(String(i+1),x,y); c.textAlign="left"; c.textBaseline="alphabetic";
+  });
 }
 
 /* ---------- regions of interest (label roots by area, e.g. genotype) ---------- */
@@ -574,6 +582,64 @@ $("roiSaveDb").onclick = async () => {
   const n = await AR_DB.count();
   $("roiSaveDb").textContent = `✓ saved ${recs.length} region(s) (${n} in DB)`;
   setTimeout(()=>$("roiSaveDb").textContent="💾 Save regions to database", 2500);
+};
+
+/* ---------- plants / seed points (root origins) → per-plant traits ---------- */
+let seeds = [], seedMode = false, plantResults = [];
+$("seedDraw").onclick = () => { seedMode = !seedMode; if(seedMode){ roiMode=false; $("roiDraw").classList.remove("primary"); }
+  $("seedDraw").classList.toggle("primary", seedMode);
+  $("seedHint").textContent = seedMode ? "click each seed position (root start); click again to add more" : "Mark where each seed was sown (the root's starting point) → per-plant traits.";
+  octx.style.cursor = seedMode ? "cell" : "default"; };
+$("seedClear").onclick = () => { seeds=[]; plantResults=[]; $("plantResults").hidden=true; redrawOverlay(); };
+octx.addEventListener("mousedown", e => { if(!seedMode||!img) return; const r=octx.getBoundingClientRect();
+  seeds.push({x:(e.clientX-r.left)/octx.width, y:(e.clientY-r.top)/octx.height}); redrawOverlay(); if(lastResult) measurePlants(); });
+$("seedAuto").onclick = () => {
+  if(!img){ alert("Load an image first."); return; }
+  const n = Math.max(1, parseInt($("plantN").value)||11);
+  const px = getImagePixels(img, imgW, imgH), bandH = Math.max(4, (imgH*0.18)|0);
+  const col = new Float32Array(imgW);
+  for(let y=0;y<bandH;y++)for(let x=0;x<imgW;x++){ const p=(y*imgW+x)*4; col[x]+=0.299*px[p]+0.587*px[p+1]+0.114*px[p+2]; }
+  const sep = Math.max(6, (imgW/(n*1.8))|0), order=[...col.keys()].sort((a,b)=>col[b]-col[a]), peaks=[];
+  for(const x of order){ if(peaks.every(p=>Math.abs(p-x)>sep)){ peaks.push(x); if(peaks.length>=n) break; } }
+  peaks.sort((a,b)=>a-b);
+  seeds = peaks.map(x=>({x:x/imgW, y:0.12}));
+  redrawOverlay(); if(lastResult) measurePlants();
+};
+
+function measurePlants(){
+  if(!seeds.length || !lastResult){ $("plantResults").hidden=true; return; }
+  const {skel,pw,ph,scale}=lastResult;
+  const sx = seeds.map(s=>s.x*pw);
+  const subs = seeds.map(()=>new Uint8Array(pw*ph));
+  for(let y=0;y<ph;y++)for(let x=0;x<pw;x++){ if(!skel[y*pw+x]) continue;    // assign to nearest seed by column
+    let best=0,bd=Infinity; for(let i=0;i<sx.length;i++){ const d=Math.abs(x-sx[i]); if(d<bd){bd=d;best=i;} }
+    subs[best][y*pw+x]=1;
+  }
+  plantResults = seeds.map((s,i)=>{
+    const t=measure(subs[i],pw,ph,pxPerCm,scale);
+    let tipx=-1,tipy=-1;                                                     // lowest point = root tip
+    for(let y=ph-1;y>=0 && tipy<0;y--)for(let x=0;x<pw;x++) if(subs[i][y*pw+x]){ tipx=x; tipy=y; break; }
+    const skew = tipy>=0 ? Math.atan2(tipx-s.x*pw, Math.max(1,tipy-s.y*ph))*180/Math.PI : 0;  // signed seed→tip skew
+    const geno = (rois.find(r=> s.x>=r.x0&&s.x<=r.x1&&s.y>=r.y0&&s.y<=r.y1)||{}).name || null;
+    return { plant:i+1, geno, traits:t, skew:+skew.toFixed(1) };
+  });
+  const u = plantResults[0]?.traits.lengthUnit || "px";
+  $("plantCount").textContent = `(${seeds.length} plant${seeds.length>1?"s":""}${rois.length?" · genotype from region":""})`;
+  $("plantTable").innerHTML = `<thead><tr><th>#</th>${rois.length?"<th>Genotype</th>":""}<th>Length</th><th>Tips</th><th>Skew°</th></tr></thead><tbody>`+
+    plantResults.map(p=>`<tr><td>${p.plant}</td>${rois.length?`<td>${esc(p.geno||"—")}</td>`:""}`+
+      `<td>${p.traits.lengthVal.toFixed?p.traits.lengthVal.toFixed(1):p.traits.lengthVal} ${p.traits.lengthUnit}</td>`+
+      `<td>${p.traits.tips}</td><td>${p.skew.toFixed(1)}</td></tr>`).join("")+`</tbody>`;
+  $("plantResults").hidden=false;
+}
+$("plantSaveDb").onclick = async () => {
+  if(!plantResults.length) return;
+  const imgName = $("imgFile").files[0]?.name || $("demoImg").value || "image";
+  const recs = plantResults.map(p => { const rec = resultRecord(`${imgName} · plant ${p.plant}${p.geno?" ("+p.geno+")":""}`, p.traits);
+    rec.group = p.geno || "plant"; rec.angle = p.skew; rec.thumb = thumbnail(); return rec; });   // per-plant angle = seed→tip skew
+  await AR_DB.saveMany(recs);
+  const n = await AR_DB.count();
+  $("plantSaveDb").textContent = `✓ saved ${recs.length} plant(s) (${n} in DB)`;
+  setTimeout(()=>$("plantSaveDb").textContent="💾 Save plants to database", 2500);
 };
 function setTraits(t){
   $("tLen").textContent   = t ? t.length : "—";

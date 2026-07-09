@@ -23,6 +23,7 @@ into one page that works on a school Chromebook. Part of the
 | **Batch** (many images → one CSV) | ✅ |
 | **Classical baseline** (Otsu threshold + Zhang–Suen thinning) | ✅ works with no model |
 | **Regions of interest** — draw + name areas (e.g. genotypes) → per-region traits | ✅ measured separately, saved tagged for group comparison |
+| **Multiple plants** — set N + mark each seed (root origin) → per-plant traits + seed→tip skew | ✅ auto-place or click; tagged by genotype region; per-plant replication |
 | **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
 | **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
 | **archiDART-comparable RSA traits** from RSML — TRL, per-order lengths, hull, surface/volume, tortuosity, Fitter topology, H0 barcode | ✅ [`docs/ARCHIDART_PARITY.md`](docs/ARCHIDART_PARITY.md) |

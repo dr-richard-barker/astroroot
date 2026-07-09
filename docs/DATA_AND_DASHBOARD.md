@@ -69,6 +69,17 @@ group**. Then the dashboard's group summary compares them directly (e.g. mean sk
 skewing genotype vs a non-skewing one). Regions persist across images of the same layout, so you
 can draw them once and apply the same boxes to each frame.
 
+### Multiple plants — mark each seed (per-plant traits)
+
+One plate usually holds several seedlings. Tell AstroRoot how many (**plants: N**) and where each
+seed was sown — the **root's starting point**. Click **🌱 Auto-place** to drop N markers on the
+brightest shoot columns, or **Place seeds** to click each one. After **Trace roots**, a
+**Per-plant** table gives each plant its own length, tips, and a **signed seed→tip skew angle**
+(the handedness that separates a skewing genotype from a straight one). If you also drew genotype
+regions, **each plant is tagged with the genotype whose region contains its seed** — so
+**Save plants to database** writes one record per plant, grouped by genotype, giving proper
+**per-plant replication** (n = plants) for the dashboard comparison.
+
 ### Groups & group summaries
 
 - **Tick the checkboxes** on any rows (or *select all filtered*) and click **Group selected…** to
