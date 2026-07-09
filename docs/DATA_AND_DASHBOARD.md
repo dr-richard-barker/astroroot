@@ -55,10 +55,11 @@ engine + marker used, the calibration, and a thumbnail. **Nothing leaves your de
   geodesic persistence barcode**. Units come from the RSML metadata (unit + resolution → cm; or
   px). Parser: `rsml.js`.
 - **Click any table row** to open the record detail — the full trait grid and its H0 barcode.
-- **Extreme stereotypes** (in the *Load sample data* menu) drops in five architectures at the
-  corners of the trait space — tap-dominant, herringbone, dichotomous, shallow-spreading,
-  fibrous — to show how the traits and barcodes differ (in the spirit of the archiDART v3.0
-  topology paper; AstroRoot-authored RSML, not that paper's exact files).
+- **Extreme stereotypes** (in the *Load sample data* menu) drops in AstroRoot's own set of five
+  reference architectures at the corners of the trait space — tap-dominant, herringbone,
+  dichotomous, shallow-spreading, fibrous — to show how the traits and barcodes differ. They're
+  generated, versioned RSML (`scripts/gen_stereotypes.py`), reproducible and license-clean; the
+  topology idea follows the archiDART v3.0 paper (Delory et al. 2018).
 
 ## Cloud sync — Supabase (metadata only)
 

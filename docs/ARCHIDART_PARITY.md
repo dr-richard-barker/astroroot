@@ -56,7 +56,9 @@ distances** — for those, export your RSML and run archiDART in R. The two are 
 inputs, AstroRoot for quick in-class analysis, archiDART for the full statistical/topological
 pipeline.
 
-*Demo data:* **Load sample data → Extreme stereotypes** loads five architectures at the corners of
-the trait space (tap-dominant, herringbone, dichotomous, shallow-spreading, fibrous) —
-AstroRoot-authored RSML in the spirit of the archiDART v3.0 topology paper (not that paper's exact
-files). Click any row to see its full trait set and H0 barcode.
+*Demo data:* **Load sample data → Extreme stereotypes** loads AstroRoot's own set of five
+reference architectures at the corners of the trait space (tap-dominant, herringbone, dichotomous,
+shallow-spreading, fibrous), built to exercise the whole trait set — the topology idea follows
+archiDART v3.0 (Delory et al. 2018). They're generated, versioned RSML
+(`scripts/gen_stereotypes.py`), so they're reproducible and license-clean. Click any row to see its
+full trait set and H0 barcode.
