@@ -20,7 +20,7 @@ const cv = $("cv"), octx = $("overlay");
 let img = null, imgW = 0, imgH = 0;
 let pxPerCm = null;               // calibration
 let lastResult = null;            // {mask, skel, traits, traces}
-let ortSession = null, ortModelName = null;
+let ortSession = null, ortModelName = null, ortBackend = null;
 
 $("imgFile").onchange = e => loadImage(e.target.files[0]);
 
@@ -84,7 +84,10 @@ async function loadOnnx(src, name, statusEl){
     const data = (typeof src === "string")
       ? new Uint8Array(await (await fetch(src)).arrayBuffer())
       : new Uint8Array(await src.arrayBuffer());
-    ortSession = await window.ort.InferenceSession.create(data, {executionProviders:["wasm"]});
+    // WebGPU runs the hourglass net in ~1s; WASM (single-threaded on Pages) is the fallback.
+    const eps = (navigator.gpu ? ["webgpu"] : []).concat(["wasm"]);
+    ortSession = await window.ort.InferenceSession.create(data, {executionProviders:eps});
+    ortBackend = ortSession.__ep = eps[0];
     ortModelName = name;
     if(statusEl) statusEl.textContent = `model ready: ${name}`;
   }catch(err){
@@ -98,17 +101,17 @@ function loadScript(src){ return new Promise((res,rej)=>{const s=document.create
 /* ---------- run ---------- */
 $("runBtn").onclick = async () => {
   $("runBtn").disabled = true; $("runBtn").textContent = "tracing…";
-  const px = getImagePixels(img, imgW, imgH);
+  const P = prepImage(img, imgW, imgH);                     // cap working resolution
   let mask;
-  if(ortSession){ try{ mask = await segmentOnnx(px, imgW, imgH); } catch(e){ console.warn(e); mask = segmentClassical(px, imgW, imgH); } }
-  else mask = segmentClassical(px, imgW, imgH);
-  const skel = zhangSuen(mask, imgW, imgH);
-  const traits = measure(skel, imgW, imgH, pxPerCm);
+  if(ortSession){ try{ mask = await segmentOnnx(P.rgba, P.w, P.h); } catch(e){ console.warn(e); mask = segmentClassical(P.rgba, P.w, P.h); } }
+  else mask = segmentClassical(P.rgba, P.w, P.h);
+  const skel = zhangSuen(mask, P.w, P.h);
+  const traits = measure(skel, P.w, P.h, pxPerCm, P.scale);
   lastResult = {mask, skel, traits};
-  drawSkeleton(skel, imgW, imgH);
+  drawSkeleton(skel, P.w, P.h);
   setTraits(traits);
   $("methodNote").textContent = ortSession
-    ? `Traced with ${ortModelName}. Measurement on the model's root mask.`
+    ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
   ["csvBtn","rsmlBtn","pngBtn"].forEach(b => $(b).disabled = false);
   $("editRow").hidden = false;
@@ -120,6 +123,16 @@ function getImagePixels(image, w, h){
   const c = document.createElement("canvas"); c.width = w; c.height = h;
   const x = c.getContext("2d"); x.drawImage(image, 0, 0, w, h);
   return x.getImageData(0,0,w,h).data;
+}
+/* cap the working resolution so thinning stays fast on big phone photos.
+ * scale = processed/original; length is converted back via this scale in measure(). */
+const MAX_PROC = 1100;
+function prepImage(image, w, h){
+  const scale = Math.min(1, MAX_PROC / Math.max(w, h));
+  const pw = Math.max(1, Math.round(w*scale)), ph = Math.max(1, Math.round(h*scale));
+  const c = document.createElement("canvas"); c.width=pw; c.height=ph;
+  c.getContext("2d").drawImage(image, 0, 0, pw, ph);
+  return { rgba: c.getContext("2d").getImageData(0,0,pw,ph).data, w:pw, h:ph, scale };
 }
 
 /* ---------- classical segmentation: Otsu threshold on inverted-if-needed luminance ---------- */
@@ -159,27 +172,29 @@ function removeSpecks(mask, w, h, minSize){
   }
 }
 
-/* ---------- ONNX segmentation: model outputs a root-probability map -> mask ---------- */
+/* ---------- ONNX segmentation (RootNav 2.0 arabidopsis_plate) ----------
+ * Spec from arabidopsis_plate.json: input 1024x1024 RGB in RAW 0-255 (scale=1, NOT /255);
+ * output [1,6,512,512] where segmentation channels are Background=0, Primary=1, Lateral=3
+ * (channels 2,4,5 are Seed/Primary/Lateral heatmaps). A pixel is "root" when Primary or
+ * Lateral segmentation beats Background. */
+const ONNX_IN = 1024, SEG_BG = 0, SEG_PRIMARY = 1, SEG_LATERAL = 3;
 async function segmentOnnx(rgba, w, h){
-  const S = 512;                                            // model input size (RootNav2 default-ish)
-  const c = document.createElement("canvas"); c.width=S; c.height=S;
+  const c = document.createElement("canvas"); c.width=ONNX_IN; c.height=ONNX_IN;
   const x = c.getContext("2d"); const tmp = document.createElement("canvas");
-  tmp.width=w; tmp.height=h; const tx=tmp.getContext("2d");
-  tx.putImageData(new ImageData(new Uint8ClampedArray(rgba), w, h), 0, 0);
-  x.drawImage(tmp, 0, 0, S, S);
-  const d = x.getImageData(0,0,S,S).data;
-  const input = new Float32Array(3*S*S);                    // CHW, normalised 0..1
-  for(let i=0;i<S*S;i++){ input[i]=d[i*4]/255; input[S*S+i]=d[i*4+1]/255; input[2*S*S+i]=d[i*4+2]/255; }
-  const feeds = {}; feeds[ortSession.inputNames[0]] = new window.ort.Tensor("float32", input, [1,3,S,S]);
+  tmp.width=w; tmp.height=h; tmp.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(rgba), w, h), 0, 0);
+  x.drawImage(tmp, 0, 0, ONNX_IN, ONNX_IN);
+  const d = x.getImageData(0,0,ONNX_IN,ONNX_IN).data, plane = ONNX_IN*ONNX_IN;
+  const input = new Float32Array(3*plane);                  // CHW, RAW 0-255
+  for(let i=0;i<plane;i++){ input[i]=d[i*4]; input[plane+i]=d[i*4+1]; input[2*plane+i]=d[i*4+2]; }
+  const feeds = {}; feeds[ortSession.inputNames[0]] = new window.ort.Tensor("float32", input, [1,3,ONNX_IN,ONNX_IN]);
   const out = await ortSession.run(feeds);
-  const o = out[ortSession.outputNames[0]];                 // [1,C,S,S] heatmaps; take root channel = last
-  const C = o.dims[1], hh = o.dims[2], ww = o.dims[3], plane = hh*ww;
-  const ch = C-1;                                           // TODO: map channels per arabidopsis_plate.json
-  // resize prob map back to w,h with nearest + threshold
+  const o = out[ortSession.outputNames[0]];                 // [1,6,512,512]
+  const hh = o.dims[2], ww = o.dims[3], p = hh*ww;
   const mask = new Uint8Array(w*h);
   for(let y=0;y<h;y++)for(let X=0;X<w;X++){
-    const sy=(y/h*hh)|0, sx=(X/w*ww)|0, v=o.data[ch*plane + sy*ww + sx];
-    mask[y*w+X] = v>0.5 ? 1 : 0;
+    const sy=(y/h*hh)|0, sx=(X/w*ww)|0, k=sy*ww+sx;
+    const bg=o.data[SEG_BG*p+k], pr=o.data[SEG_PRIMARY*p+k], la=o.data[SEG_LATERAL*p+k];
+    mask[y*w+X] = (pr>bg || la>bg) ? 1 : 0;                 // root = primary or lateral > background
   }
   removeSpecks(mask,w,h,20);
   return mask;
@@ -211,7 +226,7 @@ function zhangSuen(mask, w, h){
 }
 
 /* ---------- measure skeleton: length, tips, branches, mean angle ---------- */
-function measure(skel, w, h, ppc){
+function measure(skel, w, h, ppc, procScale=1){
   let len=0, angSum=0, angN=0;
   const idx=(x,y)=>y*w+x;
   const tipPx=[], branchPx=[];
@@ -230,11 +245,12 @@ function measure(skel, w, h, ppc){
   // one junction can span several deg>=3 pixels — cluster 8-connected special pixels so the
   // count reflects real tips/branch points, not skeleton bookkeeping.
   const tips = clusterCount(tipPx, w), branches = clusterCount(branchPx, w);
-  const lenCm = ppc ? len/ppc : null;
+  const origLen = len / procScale;                          // convert processed px -> original px
+  const lenCm = ppc ? origLen/ppc : null;
   return {
-    lengthPx: len,
-    length: lenCm!=null ? `${lenCm.toFixed(2)} cm` : `${len} px`,
-    lengthVal: lenCm!=null ? lenCm : len,
+    lengthPx: Math.round(origLen),
+    length: lenCm!=null ? `${lenCm.toFixed(2)} cm` : `${Math.round(origLen)} px`,
+    lengthVal: lenCm!=null ? lenCm : Math.round(origLen),
     lengthUnit: lenCm!=null ? "cm" : "px",
     tips, branches,
     angle: angN ? (angSum/angN) : 0
@@ -321,9 +337,9 @@ $("batchRun").onclick = async () => {
 };
 function processFile(file, ppc){
   return new Promise(res => { const im=new Image(); im.onload=async()=>{
-    const w=im.naturalWidth,h=im.naturalHeight, px=getImagePixels(im,w,h);
-    let mask; if(ortSession){ try{mask=await segmentOnnx(px,w,h);}catch{ mask=segmentClassical(px,w,h);} } else mask=segmentClassical(px,w,h);
-    res(measure(zhangSuen(mask,w,h), w, h, ppc));
+    const P=prepImage(im, im.naturalWidth, im.naturalHeight);
+    let mask; if(ortSession){ try{mask=await segmentOnnx(P.rgba,P.w,P.h);}catch{ mask=segmentClassical(P.rgba,P.w,P.h);} } else mask=segmentClassical(P.rgba,P.w,P.h);
+    res(measure(zhangSuen(mask,P.w,P.h), P.w, P.h, ppc, P.scale));
   }; im.src=URL.createObjectURL(file); });
 }
 $("batchCsv").onclick = () => {

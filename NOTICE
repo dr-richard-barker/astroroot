@@ -17,7 +17,13 @@ from the University of Nottingham, both BSD-3-Clause licensed:
     GigaScience 8(11):giz123.
     https://github.com/robail-yasrab/RootNav-2.0
 
-Trained model weights exported for use in AstroRoot remain subject to the licence of
-their upstream source. Verify the weights' licence before redistributing any .onnx model.
+The bundled model `models/arabidopsis.onnx` is the RootNav 2.0 "arabidopsis_plate" model
+(HourglassNet), exported to ONNX from the weights published at
+https://cvl.cs.nott.ac.uk/resources/trainedmodels/arabidopsis_plate-ea874d94.pth
+  Model weights: CC-BY-4.0 (Robail Yasrab, University of Nottingham) — redistributed here
+    with attribution under those terms.
+  Training dataset: CC-BY-NC-4.0 (Jonathan Atkinson, Darren Wells, University of Nottingham).
+Other RootNav 2.0 models exported for AstroRoot remain subject to their own upstream licence;
+verify before redistributing any .onnx model.
 
 ONNX Runtime Web (Microsoft, MIT) is loaded at runtime to execute models in the browser.

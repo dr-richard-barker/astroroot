@@ -1,63 +1,61 @@
-# Converting RootNav 2.0's Arabidopsis model to ONNX
+# The Arabidopsis model (RootNav 2.0 → ONNX)
 
-AstroRoot runs the RootNav 2.0 network **in the browser** via ONNX Runtime Web. RootNav 2.0
-ships PyTorch weights; this is the one-time export to `models/arabidopsis.onnx`.
+AstroRoot ships with `models/arabidopsis.onnx` — the RootNav 2.0 `arabidopsis_plate` model
+exported to ONNX and run in the browser via ONNX Runtime Web. **This is already done**; this
+page documents how, so you can reproduce it or export other RootNav 2.0 models (wheat, OSR).
 
-## Background
+The reproducible export script is [`scripts/export_onnx.py`](../scripts/export_onnx.py).
 
-RootNav 2.0's network is a **stacked-hourglass CNN**
-([`inference/models/hourglass.py`](https://github.com/robail-yasrab/RootNav-2.0/blob/master/inference/models/hourglass.py)).
-It outputs a stack of heatmaps (seed locations, root tips, and a root-segmentation channel);
-RootNav 2.0 then runs a classical path-search over those heatmaps to build per-root RSML.
+## Verified spec (from `arabidopsis_plate.json`)
 
-For the AstroRoot MVP we export the **network only** and use its root-segmentation channel as a
-mask (AstroRoot's own thinning/measurement takes it from there). Porting the full path-search
-to JS is a later step — see the roadmap in the main README.
+| | Value |
+|---|---|
+| Architecture | stacked hourglass, `HourglassNet(num_classes=6)` |
+| Weights | `arabidopsis_plate-ea874d94.pth` (17 MB) from `cvl.cs.nott.ac.uk` |
+| **Input** | `[1,3,1024,1024]`, RGB, **RAW 0–255** (scale=1 — *not* divided by 255), CHW |
+| **Output** | `[1,6,512,512]` |
+| Channels | seg: **Background=0, Primary=1, Lateral=3**; heatmaps: Primary=2, Lateral=4, Seed=5 |
+| Root mask | a pixel is root where `Primary>Background` **or** `Lateral>Background` |
+| Model licence | **CC-BY-4.0** (redistributable with attribution — see `NOTICE`) |
 
-## Steps
+These are exactly the values wired into `app.js → segmentOnnx()`.
+
+## How it was exported
 
 ```bash
-# 1. Get RootNav 2.0 and its Arabidopsis weights
 git clone https://github.com/robail-yasrab/RootNav-2.0
-cd RootNav-2.0/inference
-pip install -r requirements.txt torch onnx
-
-# 2. Export (adapt the loader to the repo's current API — model_loader.py loads the weights
-#    named in models/arabidopsis_plate.json)
-python - <<'PY'
-import torch, json
-from models.model_loader import ModelLoader        # RootNav2's loader
-model = ModelLoader.get_model('arabidopsis_plate', gpu=False)   # see arabidopsis_plate.json
-model.eval()
-dummy = torch.randn(1, 3, 512, 512)                 # AstroRoot feeds 512x512 RGB, 0..1, CHW
-torch.onnx.export(
-    model, dummy, "arabidopsis.onnx",
-    input_names=["image"], output_names=["heatmaps"],
-    opset_version=17, dynamic_axes=None)            # fixed 512 keeps ORT-Web fast
-print("wrote arabidopsis.onnx")
-PY
-
-# 3. Drop it in
-cp arabidopsis.onnx  <path-to>/astroroot/models/arabidopsis.onnx
+cd RootNav-2.0/inference/models
+pip install torch onnx onnxruntime
+curl -L -o arabidopsis_plate.pth \
+  https://cvl.cs.nott.ac.uk/resources/trainedmodels/arabidopsis_plate-ea874d94.pth
+python export_onnx.py            # the copy in astroroot/scripts/export_onnx.py
 ```
 
-## Match the output channel
+`export_onnx.py` builds `hg()`, loads the weights (`convert_state_dict` strips the DataParallel
+`module.` prefix), **unwraps the hourglass forward's list output** to its last tensor, and
+exports at opset 17 with a dynamic batch axis.
 
-`app.js → segmentOnnx()` currently takes the **last** output channel as the root map
-(`const ch = C-1`). Confirm which channel is the root segmentation for the Arabidopsis model
-(from `arabidopsis_plate.json` / the RootNav2 inference code) and set `ch` accordingly. If the
-model emits logits rather than probabilities, apply a sigmoid before the `>0.5` threshold.
+## How it was validated
 
-## Size & speed
+- **Numerical fidelity:** ONNX vs PyTorch on the same input → **100 % argmax agreement**
+  (max logit diff ~0.02, which changes no segmentation decision).
+- **Detection:** on a real spaceflight Arabidopsis root frame with raw 0–255 input, the root
+  channels activate and the Seed heatmap peaks (≈4.3); with 0–1 input it produces nothing —
+  confirming the raw-0–255 requirement.
 
-- The hourglass net is a few tens of MB in ONNX — fine to serve from GitHub Pages; it loads
-  once and caches.
-- 512×512 inference is a second or two on a laptop via the WASM backend. For big batches on
-  weak devices, consider the CyVerse/Docker path instead (see the AIRI write-up).
-- To shrink/accelerate: export at opset 17, and optionally quantize to int8 with
-  `onnxruntime.quantization` (test accuracy after).
+## Performance — WebGPU vs WASM
+
+The 1024² hourglass is heavy. AstroRoot requests the **WebGPU** execution provider first
+(≈1 s on a real GPU) and falls back to **WASM** if WebGPU is unavailable. WASM is
+single-threaded on GitHub Pages (no COOP/COEP for threads), so the first WASM run can take tens
+of seconds — the app labels the backend and warns. For WASM-only devices or big batches, prefer
+the **classical baseline** or the cloud/Docker path.
+
+> The full RootNav 2.0 pipeline also runs a CRF + A\* path-search over the heatmaps to build
+> per-root RSML. AstroRoot currently uses only the segmentation mask (then its own
+> thinning/measurement); porting the path-search to JS is on the roadmap.
 
 ## Licence
 
-RootNav 2.0 is BSD-3-Clause. Its trained weights follow the upstream repo's terms — keep the
-attribution in `NOTICE` and check the weights' licence before redistributing the `.onnx`.
+RootNav 2.0 code is BSD-3-Clause; the `arabidopsis_plate` **weights are CC-BY-4.0** (its
+training dataset is CC-BY-NC-4.0). Attribution is in [`../NOTICE`](../NOTICE).

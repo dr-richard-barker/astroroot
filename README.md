@@ -23,12 +23,14 @@ into one page that works on a school Chromebook. Part of the
 | **Calibration** from the AstroCalibration marker (px → cm) | ✅ |
 | **CSV / RSML / PNG export** | ✅ |
 | **Train-your-own** (label → export dataset → cloud-train → re-import) | ✅ label + dataset export; training runs in the cloud |
-| **Arabidopsis RootNav 2.0 model** (ONNX, in-browser) | ⏳ drops in once converted — see [`docs/MODEL_CONVERSION.md`](docs/MODEL_CONVERSION.md) |
-| **Full RootNav2 seed/tip path-search → per-root RSML** | ⏳ roadmap |
+| **Arabidopsis RootNav 2.0 model** (ONNX, in-browser) | ✅ **ships in `models/`** — WebGPU (~1 s), WASM fallback |
+| **Full RootNav2 seed/tip path-search → per-root RSML** | ⏳ roadmap (uses the segmentation mask for now) |
 
-The app is intentionally **useful before the neural net is wired up**: the classical baseline
-gives real length/tips/branch/angle numbers immediately, and the ONNX model is a drop-in
-upgrade that reuses the exact same measurement code on a cleaner mask.
+The app is **useful with or without a GPU**: the classical baseline gives real
+length/tips/branch/angle numbers instantly, and the bundled RootNav 2.0 Arabidopsis model is a
+drop-in upgrade that reuses the exact same measurement code on a cleaner mask. It runs via
+**WebGPU** where available (~1 s) and falls back to **WASM** (slower — the app shows which
+backend it used). Model weights are CC-BY-4.0 (see [`NOTICE`](NOTICE)).
 
 ## Run it
 
