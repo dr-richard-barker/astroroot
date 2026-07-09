@@ -1,0 +1,23 @@
+AstroRoot
+Copyright (c) 2026 Richard Barker / AIRI astrobotany program
+Licensed under the BSD 3-Clause License (see LICENSE).
+
+This software builds on, and is designed to interoperate with, the RootNav tools
+from the University of Nottingham, both BSD-3-Clause licensed:
+
+  RootNav 1
+    Pound MP, French AP, Atkinson JA, Wells DM, Bennett MJ, Pridmore T (2013).
+    "RootNav: Navigating Images of Complex Root Architectures." Plant Physiology 162:1802-1814.
+    Copyright (c) 2011, The University of Nottingham. All rights reserved.
+    https://www.plant-image-analysis.org/software/rootnav
+
+  RootNav 2.0
+    Yasrab R, Atkinson JA, Wells DM, French AP, Pridmore TP, Pound MP (2019).
+    "RootNav 2.0: Deep learning for automatic navigation of complex plant root architectures."
+    GigaScience 8(11):giz123.
+    https://github.com/robail-yasrab/RootNav-2.0
+
+Trained model weights exported for use in AstroRoot remain subject to the licence of
+their upstream source. Verify the weights' licence before redistributing any .onnx model.
+
+ONNX Runtime Web (Microsoft, MIT) is loaded at runtime to execute models in the browser.

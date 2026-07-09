@@ -1,0 +1,5 @@
+# large model binaries — convert/download locally (see docs/MODEL_CONVERSION.md)
+models/*.onnx
+*.pth
+.DS_Store
+vendor/

@@ -1,0 +1,407 @@
+/* AstroRoot — client-side root image analysis.
+ * Everything runs in the browser; no image is uploaded.
+ * Pipeline: calibrate -> segment (classical baseline OR ONNX model) -> thin -> measure.
+ * The ONNX path reuses the same measurement code on a better mask, so classical works today
+ * and the deep model is a drop-in upgrade. Full RootNav2 seed/tip path-search is a TODO. */
+
+const ORT_SRC = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js";
+const $ = (id) => document.getElementById(id);
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  $(t.dataset.tab).classList.add("active");
+});
+
+/* ================= SINGLE IMAGE ================= */
+const cv = $("cv"), octx = $("overlay");
+let img = null, imgW = 0, imgH = 0;
+let pxPerCm = null;               // calibration
+let lastResult = null;            // {mask, skel, traits, traces}
+let ortSession = null, ortModelName = null;
+
+$("imgFile").onchange = e => loadImage(e.target.files[0]);
+
+function loadImage(file){
+  if(!file) return;
+  const im = new Image();
+  im.onload = () => {
+    img = im; imgW = im.naturalWidth; imgH = im.naturalHeight;
+    const scale = Math.min(1, 760 / imgW);
+    cv.width = $("overlay").width = Math.round(imgW*scale);
+    cv.height = $("overlay").height = Math.round(imgH*scale);
+    cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+    clearOverlay();
+    $("runBtn").disabled = false;
+    ["csvBtn","rsmlBtn","pngBtn"].forEach(b => $(b).disabled = true);
+    $("editRow").hidden = true;
+    setTraits(null);
+  };
+  im.src = URL.createObjectURL(file);
+}
+function clearOverlay(){ octx.getContext("2d").clearRect(0,0,octx.width,octx.height); }
+
+/* ---------- calibration: click two marker points, enter their real distance ---------- */
+let calPts = [];
+$("calBtn").onclick = () => {
+  calPts = []; $("calStatus").textContent = "click TWO points a known distance apart…";
+  octx.onclick = ev => {
+    const r = octx.getBoundingClientRect();
+    calPts.push([ev.clientX - r.left, ev.clientY - r.top]);
+    const c = octx.getContext("2d"); c.fillStyle = "#58a6ff";
+    const p = calPts[calPts.length-1]; c.beginPath(); c.arc(p[0],p[1],4,0,7); c.fill();
+    if(calPts.length === 2){
+      octx.onclick = null;
+      const dpx = Math.hypot(calPts[0][0]-calPts[1][0], calPts[0][1]-calPts[1][1]);
+      const dispScale = imgW / cv.width;                       // overlay px -> image px
+      const mm = prompt("Distance between the two points, in mm?", "10");
+      const dmm = parseFloat(mm);
+      if(dmm > 0){
+        pxPerCm = (dpx*dispScale) / (dmm/10);
+        $("calStatus").textContent = `calibrated: ${pxPerCm.toFixed(1)} px/cm`;
+      } else { $("calStatus").textContent = "calibration cancelled"; }
+    }
+  };
+};
+
+/* ---------- model selection ---------- */
+$("modelSelect").onchange = e => pickModel(e.target.value, $("modelStatus"), $("modelFile"));
+$("batchModel").onchange = e => pickModel(e.target.value, null, null);
+$("modelFile").onchange = e => e.target.files[0] && loadOnnx(e.target.files[0], e.target.files[0].name);
+
+function pickModel(val, statusEl, fileEl){
+  if(val === "classical"){ ortSession = null; ortModelName = null; if(statusEl) statusEl.textContent = "classical baseline ready"; }
+  else if(val === "arabidopsis"){ loadOnnx("models/arabidopsis.onnx", "Arabidopsis (RootNav2)", statusEl); }
+  else if(val === "custom"){ if(fileEl) fileEl.click(); }
+}
+
+async function loadOnnx(src, name, statusEl){
+  try{
+    if(statusEl) statusEl.textContent = "loading model…";
+    if(!window.ort) await loadScript(ORT_SRC);
+    const data = (typeof src === "string")
+      ? new Uint8Array(await (await fetch(src)).arrayBuffer())
+      : new Uint8Array(await src.arrayBuffer());
+    ortSession = await window.ort.InferenceSession.create(data, {executionProviders:["wasm"]});
+    ortModelName = name;
+    if(statusEl) statusEl.textContent = `model ready: ${name}`;
+  }catch(err){
+    ortSession = null; ortModelName = null;
+    if(statusEl) statusEl.textContent = "model not available — using classical baseline";
+    console.warn("ONNX load failed:", err);
+  }
+}
+function loadScript(src){ return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);}); }
+
+/* ---------- run ---------- */
+$("runBtn").onclick = async () => {
+  $("runBtn").disabled = true; $("runBtn").textContent = "tracing…";
+  const px = getImagePixels(img, imgW, imgH);
+  let mask;
+  if(ortSession){ try{ mask = await segmentOnnx(px, imgW, imgH); } catch(e){ console.warn(e); mask = segmentClassical(px, imgW, imgH); } }
+  else mask = segmentClassical(px, imgW, imgH);
+  const skel = zhangSuen(mask, imgW, imgH);
+  const traits = measure(skel, imgW, imgH, pxPerCm);
+  lastResult = {mask, skel, traits};
+  drawSkeleton(skel, imgW, imgH);
+  setTraits(traits);
+  $("methodNote").textContent = ortSession
+    ? `Traced with ${ortModelName}. Measurement on the model's root mask.`
+    : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
+  ["csvBtn","rsmlBtn","pngBtn"].forEach(b => $(b).disabled = false);
+  $("editRow").hidden = false;
+  $("runBtn").disabled = false; $("runBtn").textContent = "Trace roots";
+};
+
+/* ---------- image -> grayscale pixel array ---------- */
+function getImagePixels(image, w, h){
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const x = c.getContext("2d"); x.drawImage(image, 0, 0, w, h);
+  return x.getImageData(0,0,w,h).data;
+}
+
+/* ---------- classical segmentation: Otsu threshold on inverted-if-needed luminance ---------- */
+function segmentClassical(rgba, w, h){
+  const n = w*h, gray = new Uint8Array(n); let sum = 0;
+  for(let i=0;i<n;i++){ const g = (rgba[i*4]*0.299 + rgba[i*4+1]*0.587 + rgba[i*4+2]*0.114)|0; gray[i]=g; sum+=g; }
+  const mean = sum/n;
+  const t = otsu(gray);
+  // roots are usually darker than background; if background is dark, invert.
+  const rootsAreDark = mean > t;
+  const mask = new Uint8Array(n);
+  // note: Otsu can land the threshold on the darker cluster's value, so the dark side is
+  // inclusive (<=) to avoid dropping root pixels; the light side stays exclusive (>).
+  for(let i=0;i<n;i++) mask[i] = (rootsAreDark ? gray[i] <= t : gray[i] > t) ? 1 : 0;
+  removeSpecks(mask, w, h, 20);
+  return mask;
+}
+function otsu(gray){
+  const hist = new Array(256).fill(0); for(const g of gray) hist[g]++;
+  const total = gray.length; let sum = 0; for(let i=0;i<256;i++) sum += i*hist[i];
+  let sumB=0, wB=0, max=0, thr=127;
+  for(let i=0;i<256;i++){ wB+=hist[i]; if(!wB) continue; const wF=total-wB; if(!wF) break;
+    sumB += i*hist[i]; const mB=sumB/wB, mF=(sum-sumB)/wF, between=wB*wF*(mB-mF)*(mB-mF);
+    if(between>max){max=between;thr=i;} }
+  return thr;
+}
+function removeSpecks(mask, w, h, minSize){
+  const seen = new Uint8Array(mask.length), stack = [];
+  for(let i=0;i<mask.length;i++){
+    if(!mask[i]||seen[i]) continue;
+    const comp=[]; stack.push(i); seen[i]=1;
+    while(stack.length){ const p=stack.pop(); comp.push(p); const x=p%w,y=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ const nx=x+dx,ny=y+dy;
+        if(nx<0||ny<0||nx>=w||ny>=h) continue; const q=ny*w+nx;
+        if(mask[q]&&!seen[q]){seen[q]=1;stack.push(q);} } }
+    if(comp.length<minSize) for(const p of comp) mask[p]=0;
+  }
+}
+
+/* ---------- ONNX segmentation: model outputs a root-probability map -> mask ---------- */
+async function segmentOnnx(rgba, w, h){
+  const S = 512;                                            // model input size (RootNav2 default-ish)
+  const c = document.createElement("canvas"); c.width=S; c.height=S;
+  const x = c.getContext("2d"); const tmp = document.createElement("canvas");
+  tmp.width=w; tmp.height=h; const tx=tmp.getContext("2d");
+  tx.putImageData(new ImageData(new Uint8ClampedArray(rgba), w, h), 0, 0);
+  x.drawImage(tmp, 0, 0, S, S);
+  const d = x.getImageData(0,0,S,S).data;
+  const input = new Float32Array(3*S*S);                    // CHW, normalised 0..1
+  for(let i=0;i<S*S;i++){ input[i]=d[i*4]/255; input[S*S+i]=d[i*4+1]/255; input[2*S*S+i]=d[i*4+2]/255; }
+  const feeds = {}; feeds[ortSession.inputNames[0]] = new window.ort.Tensor("float32", input, [1,3,S,S]);
+  const out = await ortSession.run(feeds);
+  const o = out[ortSession.outputNames[0]];                 // [1,C,S,S] heatmaps; take root channel = last
+  const C = o.dims[1], hh = o.dims[2], ww = o.dims[3], plane = hh*ww;
+  const ch = C-1;                                           // TODO: map channels per arabidopsis_plate.json
+  // resize prob map back to w,h with nearest + threshold
+  const mask = new Uint8Array(w*h);
+  for(let y=0;y<h;y++)for(let X=0;X<w;X++){
+    const sy=(y/h*hh)|0, sx=(X/w*ww)|0, v=o.data[ch*plane + sy*ww + sx];
+    mask[y*w+X] = v>0.5 ? 1 : 0;
+  }
+  removeSpecks(mask,w,h,20);
+  return mask;
+}
+
+/* ---------- Zhang-Suen thinning -> 1px skeleton ---------- */
+function zhangSuen(mask, w, h){
+  const im = Uint8Array.from(mask); let changed = true;
+  const idx=(x,y)=>y*w+x;
+  const nb=(x,y)=>[im[idx(x,y-1)],im[idx(x+1,y-1)],im[idx(x+1,y)],im[idx(x+1,y+1)],
+                   im[idx(x,y+1)],im[idx(x-1,y+1)],im[idx(x-1,y)],im[idx(x-1,y-1)]];
+  function pass(step){
+    const del=[];
+    for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+      if(!im[idx(x,y)]) continue;
+      const p=nb(x,y); let B=0; for(const v of p) B+=v;
+      if(B<2||B>6) continue;
+      let A=0; for(let i=0;i<8;i++) if(!p[i]&&p[(i+1)%8]) A++;
+      if(A!==1) continue;
+      const [n0,n1,n2,n3,n4,n5,n6,n7]=p;
+      if(step===0){ if(n0&&n2&&n4) continue; if(n2&&n4&&n6) continue; }
+      else { if(n0&&n2&&n6) continue; if(n0&&n4&&n6) continue; }
+      del.push(idx(x,y));
+    }
+    for(const p of del) im[p]=0; return del.length>0;
+  }
+  while(changed){ changed=false; if(pass(0)) changed=true; if(pass(1)) changed=true; }
+  return im;
+}
+
+/* ---------- measure skeleton: length, tips, branches, mean angle ---------- */
+function measure(skel, w, h, ppc){
+  let len=0, angSum=0, angN=0;
+  const idx=(x,y)=>y*w+x;
+  const tipPx=[], branchPx=[];
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    if(!skel[idx(x,y)]) continue;
+    len++;
+    let deg=0, dxs=0, dys=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      if(!dx&&!dy) continue;
+      if(skel[idx(x+dx,y+dy)]){ deg++; dxs+=dx; dys+=dy; }
+    }
+    if(deg===1) tipPx.push(idx(x,y));
+    else if(deg>=3) branchPx.push(idx(x,y));
+    if(deg>=1){ const a=Math.abs(Math.atan2(dxs, -dys))*180/Math.PI; angSum+=Math.min(a,180-a); angN++; }
+  }
+  // one junction can span several deg>=3 pixels — cluster 8-connected special pixels so the
+  // count reflects real tips/branch points, not skeleton bookkeeping.
+  const tips = clusterCount(tipPx, w), branches = clusterCount(branchPx, w);
+  const lenCm = ppc ? len/ppc : null;
+  return {
+    lengthPx: len,
+    length: lenCm!=null ? `${lenCm.toFixed(2)} cm` : `${len} px`,
+    lengthVal: lenCm!=null ? lenCm : len,
+    lengthUnit: lenCm!=null ? "cm" : "px",
+    tips, branches,
+    angle: angN ? (angSum/angN) : 0
+  };
+}
+
+function clusterCount(pixels, w){
+  // count 8-connected clusters among a sparse pixel set
+  const set = new Set(pixels); let clusters = 0;
+  const seen = new Set();
+  for(const p of pixels){
+    if(seen.has(p)) continue;
+    clusters++; const stack=[p]; seen.add(p);
+    while(stack.length){ const q=stack.pop(); const x=q%w, y=(q/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue;
+        const r=(y+dy)*w+(x+dx); if(set.has(r)&&!seen.has(r)){ seen.add(r); stack.push(r); } } }
+  }
+  return clusters;
+}
+
+/* ---------- draw + results ---------- */
+function drawSkeleton(skel, w, h){
+  const c = octx.getContext("2d"); clearOverlay();
+  const sx = octx.width/w, sy = octx.height/h;
+  c.fillStyle = "#3fb950";
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++) if(skel[y*w+x]) c.fillRect(x*sx, y*sy, Math.max(1,sx), Math.max(1,sy));
+}
+function setTraits(t){
+  $("tLen").textContent   = t ? t.length : "—";
+  $("tTips").textContent  = t ? t.tips : "—";
+  $("tBranch").textContent= t ? t.branches : "—";
+  $("tAngle").textContent = t ? `${t.angle.toFixed(1)}°` : "—";
+}
+
+/* ---------- exports ---------- */
+$("csvBtn").onclick = () => { const t=lastResult.traits;
+  download("astroroot_result.csv",
+    "length_"+t.lengthUnit+",tips,branches,angle_deg\n"+`${t.lengthVal.toFixed(3)},${t.tips},${t.branches},${t.angle.toFixed(1)}\n`,
+    "text/csv"); };
+$("pngBtn").onclick = () => { const m=document.createElement("canvas"); m.width=cv.width;m.height=cv.height;
+  const x=m.getContext("2d"); x.drawImage(cv,0,0); x.drawImage(octx,0,0);
+  m.toBlob(b=>download("astroroot_overlay.png", b, "image/png")); };
+$("rsmlBtn").onclick = () => download("astroroot.rsml", buildRSML(lastResult.traits, imgW, imgH), "application/xml");
+
+function buildRSML(t, w, h){
+  // Minimal valid RSML capturing image size + measured scalars. Vector polylines are exported
+  // from the Train/label tab; the auto path stores traits as <property> pending full path-search.
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rsml xmlns:po="http://www.plantontology.org/xml-dtd/po.dtd">
+  <metadata><version>1</version><unit>${t.lengthUnit}</unit><software>AstroRoot</software>
+    <image><name>seedling</name><size width="${w}" height="${h}"/></image></metadata>
+  <scene><plant>
+    <root ID="auto-1"><properties>
+      <length>${t.lengthVal.toFixed(3)}</length><tips>${t.tips}</tips>
+      <branches>${t.branches}</branches><angle_from_vertical>${t.angle.toFixed(1)}</angle_from_vertical>
+    </properties></root>
+  </plant></scene>
+</rsml>`;
+}
+function download(name, data, type){
+  const blob = data instanceof Blob ? data : new Blob([data], {type});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+}
+
+/* ================= BATCH ================= */
+let batchRows = [];
+$("batchFiles").onchange = e => $("batchRun").disabled = e.target.files.length===0;
+$("batchRun").onclick = async () => {
+  const files = [...$("batchFiles").files];
+  const ppc = parseFloat($("batchScale").value) || null;
+  const tbody = $("batchTable").querySelector("tbody"); tbody.innerHTML=""; batchRows=[];
+  $("batchTable").hidden = false;
+  for(let i=0;i<files.length;i++){
+    $("batchProgress").textContent = `processing ${i+1} / ${files.length}…`;
+    const t = await processFile(files[i], ppc);
+    batchRows.push({name:files[i].name, ...t});
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${files[i].name}</td><td>${t.lengthVal.toFixed(2)} ${t.lengthUnit}</td>`+
+                   `<td>${t.tips}</td><td>${t.branches}</td><td>${t.angle.toFixed(1)}</td>`;
+    tbody.appendChild(tr);
+  }
+  $("batchProgress").textContent = `done — ${files.length} images.`;
+  $("batchCsv").disabled = false;
+};
+function processFile(file, ppc){
+  return new Promise(res => { const im=new Image(); im.onload=async()=>{
+    const w=im.naturalWidth,h=im.naturalHeight, px=getImagePixels(im,w,h);
+    let mask; if(ortSession){ try{mask=await segmentOnnx(px,w,h);}catch{ mask=segmentClassical(px,w,h);} } else mask=segmentClassical(px,w,h);
+    res(measure(zhangSuen(mask,w,h), w, h, ppc));
+  }; im.src=URL.createObjectURL(file); });
+}
+$("batchCsv").onclick = () => {
+  const u = batchRows[0]?.lengthUnit || "px";
+  let csv = `image,length_${u},tips,branches,angle_deg\n`;
+  for(const r of batchRows) csv += `${r.name},${r.lengthVal.toFixed(3)},${r.tips},${r.branches},${r.angle.toFixed(1)}\n`;
+  download("astroroot_batch.csv", csv, "text/csv");
+};
+
+/* ================= TRAIN — labelling ================= */
+const lblCv=$("lblCv"), lblOv=$("lblOverlay");
+let lblImg=null, lblW=0, lblH=0, traces=[], cur=[], dataset=[];
+$("lblImg").onchange = e => { const f=e.target.files[0]; if(!f) return;
+  const im=new Image(); im.onload=()=>{ lblImg=im; lblW=im.naturalWidth; lblH=im.naturalHeight;
+    const s=Math.min(1,620/lblW); lblCv.width=lblOv.width=Math.round(lblW*s); lblCv.height=lblOv.height=Math.round(lblH*s);
+    lblCv.getContext("2d").drawImage(im,0,0,lblCv.width,lblCv.height); traces=[];cur=[];redrawLabels(); updCounts();
+  }; im.src=URL.createObjectURL(f); };
+lblOv.onclick = ev => { if(!lblImg) return; const r=lblOv.getBoundingClientRect();
+  cur.push([ev.clientX-r.left, ev.clientY-r.top]); redrawLabels(); };
+lblOv.ondblclick = () => finishRoot();
+$("lblFinish").onclick = finishRoot;
+$("lblUndo").onclick = () => { cur.pop(); redrawLabels(); };
+$("lblClear").onclick = () => { traces=[];cur=[];redrawLabels();updCounts(); };
+function finishRoot(){ if(cur.length>=2){ traces.push(cur); } cur=[]; redrawLabels(); updCounts(); }
+function redrawLabels(){ const c=lblOv.getContext("2d"); c.clearRect(0,0,lblOv.width,lblOv.height);
+  const drawLine=(pts,col)=>{ c.strokeStyle=col;c.lineWidth=2;c.beginPath();
+    pts.forEach((p,i)=> i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke();
+    c.fillStyle=col; pts.forEach(p=>{c.beginPath();c.arc(p[0],p[1],3,0,7);c.fill();}); };
+  traces.forEach(t=>drawLine(t,"#3fb950")); if(cur.length) drawLine(cur,"#58a6ff");
+}
+function updCounts(){ $("lblCount").textContent = `${traces.length} roots traced`; $("dsExport").disabled = dataset.length===0; }
+$("dsAdd").onclick = () => { if(!lblImg||!traces.length){ alert("Trace at least one root first."); return; }
+  const s=lblW/lblCv.width;   // overlay -> image coords
+  dataset.push({ name:`img_${dataset.length+1}.png`, w:lblW, h:lblH,
+    rsml: labelRSML(traces.map(t=>t.map(p=>[p[0]*s,p[1]*s])), lblW, lblH),
+    png: lblCv.toDataURL("image/png") });
+  $("dsCount").textContent = `${dataset.length} images in dataset`; $("dsExport").disabled=false;
+};
+function labelRSML(traces, w, h){
+  const roots = traces.map((t,i)=>`      <root ID="r${i+1}"><geometry><polyline>`+
+    t.map(p=>`<point x="${p[0].toFixed(1)}" y="${p[1].toFixed(1)}"/>`).join("")+
+    `</polyline></geometry></root>`).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rsml><metadata><version>1</version><software>AstroRoot</software>
+  <image><size width="${w}" height="${h}"/></image></metadata>
+  <scene><plant>\n${roots}\n  </plant></scene></rsml>`;
+}
+$("dsExport").onclick = () => exportDataset();
+function exportDataset(){
+  // store-only ZIP of image+rsml pairs (RootNav2 training format).
+  const files = [];
+  dataset.forEach((d,i)=>{ const base=`train/${String(i+1).padStart(3,"0")}`;
+    files.push([`${base}.png`, dataURLtoBytes(d.png)]);
+    files.push([`${base}.rsml`, new TextEncoder().encode(d.rsml)]); });
+  files.push(["README.txt", new TextEncoder().encode(
+    "AstroRoot training set — image (.png) + label (.rsml) pairs.\nUpload to the training notebook (docs/TRAINING.md).")]);
+  download("astroroot_dataset.zip", makeZip(files), "application/zip");
+}
+function dataURLtoBytes(u){ const b=atob(u.split(",")[1]); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i); return a; }
+
+/* ---- minimal STORE zip (no deps) ---- */
+function makeZip(files){
+  const enc=new TextEncoder(); const chunks=[]; const central=[]; let offset=0;
+  const u16=n=>[n&255,(n>>8)&255]; const u32=n=>[n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255];
+  for(const [name,data] of files){
+    const nb=enc.encode(name), crc=crc32(data);
+    const local=[...u32(0x04034b50),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+      ...u32(crc),...u32(data.length),...u32(data.length),...u16(nb.length),...u16(0)];
+    chunks.push(new Uint8Array(local), nb, data);
+    central.push({name:nb,crc,len:data.length,offset});
+    offset += local.length + nb.length + data.length;
+  }
+  const cstart=offset; const cd=[];
+  for(const c of central){ const h=[...u32(0x02014b50),...u16(20),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+    ...u32(c.crc),...u32(c.len),...u32(c.len),...u16(c.name.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(c.offset)];
+    cd.push(new Uint8Array(h), c.name); offset += h.length + c.name.length; }
+  const end=[...u32(0x06054b50),...u16(0),...u16(0),...u16(central.length),...u16(central.length),...u32(offset-cstart),...u32(cstart),...u16(0)];
+  return new Blob([...chunks,...cd,new Uint8Array(end)],{type:"application/zip"});
+}
+const CRC_TABLE=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(bytes){let c=0xFFFFFFFF;for(let i=0;i<bytes.length;i++)c=CRC_TABLE[(c^bytes[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}

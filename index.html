@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AstroRoot — root image analysis for the classroom</title>
+<!-- ONNX Runtime Web (loaded lazily; the app works without it via the classical baseline).
+     If offline, drop onnxruntime-web's dist files into ./vendor and point ORT_SRC there. -->
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>🛰️ AstroRoot</h1>
+  <p class="tag">Turn a photo of seedling roots into numbers — in your browser, nothing uploaded.</p>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="single" role="tab">Single image</button>
+  <button class="tab" data-tab="batch" role="tab">Batch (folder)</button>
+  <button class="tab" data-tab="train" role="tab">Train your own model</button>
+  <button class="tab" data-tab="about" role="tab">About</button>
+</nav>
+
+<main>
+  <!-- ============ SINGLE ============ -->
+  <section id="single" class="panel active">
+    <div class="controls">
+      <div class="ctl">
+        <label>1 · Model</label>
+        <select id="modelSelect">
+          <option value="classical">Quick estimate (classical — works now)</option>
+          <option value="arabidopsis">Arabidopsis (RootNav 2.0, ONNX)</option>
+          <option value="custom">My own model (.onnx)…</option>
+        </select>
+        <input type="file" id="modelFile" accept=".onnx" hidden />
+        <span id="modelStatus" class="hint">classical baseline ready</span>
+      </div>
+      <div class="ctl">
+        <label>2 · Photo</label>
+        <input type="file" id="imgFile" accept="image/*" />
+      </div>
+      <div class="ctl">
+        <label>3 · Scale</label>
+        <button id="calBtn" class="ghost">Set scale from marker…</button>
+        <span id="calStatus" class="hint">not calibrated (results in px)</span>
+      </div>
+      <div class="ctl">
+        <label>4 · Run</label>
+        <button id="runBtn" class="primary" disabled>Trace roots</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="canvaswrap">
+        <canvas id="cv"></canvas>
+        <canvas id="overlay"></canvas>
+      </div>
+      <aside class="results">
+        <h3>Measurements</h3>
+        <table id="traits">
+          <tr><td>Total root length</td><td id="tLen">—</td></tr>
+          <tr><td>Root tips</td><td id="tTips">—</td></tr>
+          <tr><td>Branch points</td><td id="tBranch">—</td></tr>
+          <tr><td>Mean angle from vertical</td><td id="tAngle">—</td></tr>
+        </table>
+        <div class="editrow" hidden id="editRow">
+          <label><input type="checkbox" id="editMode" /> Correct by hand</label>
+          <span class="hint">click to add a tip · shift-click a trace to delete</span>
+        </div>
+        <div class="btnrow">
+          <button id="csvBtn" class="ghost" disabled>Download CSV</button>
+          <button id="rsmlBtn" class="ghost" disabled>Download RSML</button>
+          <button id="pngBtn" class="ghost" disabled>Save overlay PNG</button>
+        </div>
+        <p class="method" id="methodNote"></p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ BATCH ============ -->
+  <section id="batch" class="panel">
+    <div class="controls">
+      <div class="ctl">
+        <label>Model</label>
+        <select id="batchModel">
+          <option value="classical">Quick estimate (classical)</option>
+          <option value="arabidopsis">Arabidopsis (RootNav 2.0, ONNX)</option>
+          <option value="custom">My own model (.onnx)…</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Scale (px per cm)</label>
+        <input type="number" id="batchScale" placeholder="e.g. 60 — blank = px" min="1" step="0.1" />
+      </div>
+      <div class="ctl">
+        <label>Images</label>
+        <input type="file" id="batchFiles" accept="image/*" multiple />
+      </div>
+      <div class="ctl">
+        <label>Run</label>
+        <button id="batchRun" class="primary" disabled>Process all</button>
+      </div>
+    </div>
+    <div id="batchProgress" class="hint"></div>
+    <table id="batchTable" class="datatable" hidden>
+      <thead><tr><th>Image</th><th>Length</th><th>Tips</th><th>Branches</th><th>Angle°</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="btnrow">
+      <button id="batchCsv" class="ghost" disabled>Download results CSV</button>
+    </div>
+  </section>
+
+  <!-- ============ TRAIN ============ -->
+  <section id="train" class="panel">
+    <h2>Train your own model</h2>
+    <p>
+      The neural network can't be trained inside the browser — that needs a GPU. So AstroRoot
+      splits the job: you <b>label examples here</b>, train <b>in the cloud</b> (a free Colab or
+      CyVerse notebook), then <b>load the finished <code>.onnx</code> back into AstroRoot</b>.
+    </p>
+    <ol class="steps">
+      <li>
+        <b>Label roots.</b> Load a photo, then trace each root by clicking along it (click to add
+        points, double-click to finish a root). Each trace is saved as an RSML polyline.
+        <div class="canvaswrap small">
+          <canvas id="lblCv"></canvas>
+          <canvas id="lblOverlay"></canvas>
+        </div>
+        <div class="btnrow">
+          <input type="file" id="lblImg" accept="image/*" />
+          <button id="lblUndo" class="ghost">Undo point</button>
+          <button id="lblFinish" class="ghost">Finish root</button>
+          <button id="lblClear" class="ghost">Clear image</button>
+          <span id="lblCount" class="hint">0 roots traced</span>
+        </div>
+      </li>
+      <li>
+        <b>Build the training set.</b> Add each labelled image to your dataset, then export it as a
+        zip of image + RSML pairs (the exact format RootNav 2.0 trains on).
+        <div class="btnrow">
+          <button id="dsAdd" class="ghost">Add this image to dataset</button>
+          <button id="dsExport" class="primary" disabled>Export training set (.zip)</button>
+          <span id="dsCount" class="hint">0 images in dataset</span>
+        </div>
+      </li>
+      <li>
+        <b>Train in the cloud.</b> Open the training notebook, upload your zip, run it (≈30–60 min
+        on a free GPU). It fine-tunes the Arabidopsis model and gives you a <code>model.onnx</code>.
+        <div class="btnrow">
+          <a class="ghost btnlink" id="colabLink" href="docs/TRAINING.md">Open training guide</a>
+        </div>
+      </li>
+      <li>
+        <b>Use it.</b> Back on the Single/Batch tabs, choose <i>My own model (.onnx)…</i> and pick
+        your file. It now traces roots in <i>your</i> style.
+      </li>
+    </ol>
+  </section>
+
+  <!-- ============ ABOUT ============ -->
+  <section id="about" class="panel">
+    <h2>About AstroRoot</h2>
+    <p>
+      A free, install-free root-image analyser for students and teachers. It brings together the
+      friendly, correct-by-hand feel of <b>RootNav 1</b> with the automatic tracing of
+      <b>RootNav 2.0</b>'s deep-learning model — running entirely in your browser, so student
+      photos never leave the device.
+    </p>
+    <ul>
+      <li><b>Auto engine:</b> RootNav 2.0 stacked-hourglass model, exported to ONNX, run with
+        ONNX Runtime Web. (Until a model is loaded, a transparent classical baseline is used.)</li>
+      <li><b>Interactive layer:</b> RootNav 1-style hand correction of the traced result.</li>
+      <li><b>Outputs:</b> length, tips, branch points, gravitropic angle; CSV + RSML export.</li>
+      <li><b>Calibration:</b> the AstroCalibration marker sets pixels → millimetres.</li>
+    </ul>
+    <p class="method">
+      Built on <a href="https://github.com/robail-yasrab/RootNav-2.0">RootNav 2.0</a> and
+      <a href="https://www.plant-image-analysis.org/software/rootnav">RootNav 1</a>
+      (both BSD-3-Clause, University of Nottingham). Part of the
+      <a href="https://dr-richard-barker.github.io/AIRI/">AIRI</a> astrobotany program.
+    </p>
+  </section>
+</main>
+
+<footer>
+  <span>AstroRoot · BSD-3-Clause · your images stay on your device</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
