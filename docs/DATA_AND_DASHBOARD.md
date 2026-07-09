@@ -90,6 +90,11 @@ timestamped in order so each plant's trait **trajectory over time** is preserved
 the dashboard compares genotypes across the whole series (and the CSV has `frame, group, plant`
 columns for your own stats). The batch note tells you exactly what will be applied before you run.
 
+The dashboard then draws a **Per-plant trajectory** chart: a thin line for every plant and a bold
+line for each **genotype mean**, over the frames — switch the metric between **angle/skew**,
+length, or tips. For the classic skew comparison, watch the skewing genotype's mean drift away
+from zero while the straight one stays flat.
+
 ### Groups & group summaries
 
 - **Tick the checkboxes** on any rows (or *select all filtered*) and click **Group selected…** to

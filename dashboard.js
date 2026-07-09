@@ -93,7 +93,45 @@ function renderCharts(rows){
   $("chartLen").innerHTML = histogram(rows.map(r=>r.lengthVal).filter(v=>typeof v==="number"),
                                       units.length===1?units[0]:"", "var(--accent)");
   $("chartAngle").innerHTML = histogram(rows.map(r=>r.angle).filter(v=>typeof v==="number"), "°", "var(--accent2)");
+  renderTrajectory(rows);
 }
+
+const TRAJ_PALETTE = ["#3fb950","#58a6ff","#d29922","#f85149","#b07fd0","#e668a7","#39c5cf","#db6d28"];
+function renderTrajectory(rows){
+  // build series from time-series records (batch-across-frames: have frame + plant)
+  const ts = rows.filter(r => r.frame && r.plant!=null && typeof r[$("trajMetric").value]==="number");
+  const series = {};
+  ts.forEach(r => { const key = `${r.group||"plant"}#${r.plant}`;
+    (series[key] = series[key] || {group:r.group||"plant", pts:[]}).pts.push(r); });
+  const keys = Object.keys(series);
+  if(!keys.length || Object.values(series).every(s=>s.pts.length<2)){ $("trajBox").style.display="none"; return; }
+  $("trajBox").style.display="block";
+  const metric = $("trajMetric").value;
+  const allTs = [...new Set(ts.map(r=>r.ts))].sort((a,b)=>a-b);
+  const tmin=allTs[0], tmax=allTs[allTs.length-1]||tmin+1;
+  const vals = ts.map(r=>+r[metric]); let vmin=Math.min(...vals), vmax=Math.max(...vals);
+  if(vmin===vmax){ vmin-=1; vmax+=1; }
+  const groups = [...new Set(Object.values(series).map(s=>s.group))];
+  const gcol = g => TRAJ_PALETTE[groups.indexOf(g)%TRAJ_PALETTE.length];
+  const W=720,H=280,pad=42;
+  const sx=t=>pad+(W-2*pad)*(t-tmin)/((tmax-tmin)||1), sy=v=>H-pad-(H-2*pad)*(v-vmin)/((vmax-vmin)||1);
+  let faint="", mean="";
+  Object.values(series).forEach(s=>{ const p=s.pts.slice().sort((a,b)=>a.ts-b.ts); if(p.length<2) return;
+    faint += `<polyline points="${p.map(r=>sx(r.ts).toFixed(1)+","+sy(+r[metric]).toFixed(1)).join(" ")}" fill="none" stroke="${gcol(s.group)}" stroke-width="1" opacity="0.3"/>`; });
+  groups.forEach(g=>{ const byTs={}; Object.values(series).filter(s=>s.group===g).forEach(s=>s.pts.forEach(r=>{ (byTs[r.ts]=byTs[r.ts]||[]).push(+r[metric]); }));
+    const mp=Object.keys(byTs).map(t=>({ts:+t, v:byTs[t].reduce((a,b)=>a+b,0)/byTs[t].length})).sort((a,b)=>a.ts-b.ts);
+    if(mp.length<2) return;
+    mean += `<polyline points="${mp.map(p=>sx(p.ts).toFixed(1)+","+sy(p.v).toFixed(1)).join(" ")}" fill="none" stroke="${gcol(g)}" stroke-width="3.5" opacity="0.95"/>`;
+    mean += mp.map(p=>`<circle cx="${sx(p.ts).toFixed(1)}" cy="${sy(p.v).toFixed(1)}" r="3" fill="${gcol(g)}"/>`).join(""); });
+  const zeroLine = (vmin<0&&vmax>0) ? `<line x1="${pad}" y1="${sy(0).toFixed(1)}" x2="${W-pad}" y2="${sy(0).toFixed(1)}" stroke="var(--muted)" stroke-dasharray="3,3" opacity="0.5"/>` : "";
+  const axis = `<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="var(--edge)"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="var(--edge)"/>`+
+    `<text x="${pad}" y="${H-pad+16}" font-size="10" fill="var(--muted)">frame 1</text><text x="${W-pad}" y="${H-pad+16}" font-size="10" fill="var(--muted)" text-anchor="end">frame ${allTs.length}</text>`+
+    `<text x="8" y="${pad+3}" font-size="10" fill="var(--muted)">${vmax.toFixed(1)}</text><text x="8" y="${(H-pad).toFixed(0)}" font-size="10" fill="var(--muted)">${vmin.toFixed(1)}</text>`;
+  $("trajChart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${zeroLine}${faint}${mean}${axis}</svg>`;
+  $("trajLegend").innerHTML = groups.map(g=>`<span style="color:${gcol(g)};font-weight:700">■</span> ${esc(g)}`).join("  ")+
+    ` · thin = each plant, thick = genotype mean · ${keys.length} plant-tracks over ${allTs.length} frames`;
+}
+$("trajMetric").onchange = () => renderTrajectory(view());
 
 function renderTable(rows){
   const tb = $("tbl").querySelector("tbody");

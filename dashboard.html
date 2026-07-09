@@ -66,6 +66,19 @@
       <div class="chartbox"><h3>Root length distribution</h3><div id="chartLen"></div></div>
       <div class="chartbox"><h3>Angle from vertical (skew)</h3><div id="chartAngle"></div></div>
     </div>
+
+    <div id="trajBox" class="chartbox" style="display:none;margin-bottom:16px">
+      <div class="btnrow" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Per-plant trajectory over frames</h3>
+        <label class="mini">metric <select id="trajMetric">
+          <option value="angle">angle / skew</option>
+          <option value="lengthVal">length</option>
+          <option value="tips">tips</option>
+        </select></label>
+      </div>
+      <div id="trajChart"></div>
+      <div id="trajLegend" class="hint"></div>
+    </div>
     <div id="groupSummary"></div>
 
     <div class="btnrow" id="groupBar" style="margin:6px 0">
