@@ -65,11 +65,12 @@ function loadImage(file){
     cv.width = $("overlay").width = Math.round(imgW*scale);
     cv.height = $("overlay").height = Math.round(imgH*scale);
     drawBase();
-    clearOverlay();
+    lastResult = null; redrawOverlay();                      // keep any regions, drop old skeleton
     $("runBtn").disabled = false;
     ["csvBtn","rsmlBtn","pngBtn"].forEach(b => $(b).disabled = true);
     $("editRow").hidden = true;
     setTraits(null);
+    if(rois.length) measureROIs();
   };
   im.src = URL.createObjectURL(file);
 }
@@ -262,9 +263,10 @@ $("runBtn").onclick = async () => {
   else mask = segmentClassical(P.rgba, P.w, P.h);
   const skel = zhangSuen(mask, P.w, P.h);
   const traits = measure(skel, P.w, P.h, pxPerCm, P.scale);
-  lastResult = {mask, skel, traits};
-  drawSkeleton(skel, P.w, P.h);
+  lastResult = {mask, skel, traits, pw:P.w, ph:P.h, scale:P.scale};
+  redrawOverlay();
   setTraits(traits);
+  measureROIs();
   $("methodNote").textContent = ortSession
     ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
@@ -512,12 +514,67 @@ function clusterCount(pixels, w){
 }
 
 /* ---------- draw + results ---------- */
-function drawSkeleton(skel, w, h){
-  const c = octx.getContext("2d"); clearOverlay();
-  const sx = octx.width/w, sy = octx.height/h;
-  c.fillStyle = "#3fb950";
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++) if(skel[y*w+x]) c.fillRect(x*sx, y*sy, Math.max(1,sx), Math.max(1,sy));
+function redrawOverlay(){
+  const c = octx.getContext("2d"); c.clearRect(0,0,octx.width,octx.height);
+  if(lastResult && lastResult.skel){                        // skeleton
+    const {skel,pw,ph}=lastResult, sx=octx.width/pw, sy=octx.height/ph;
+    c.fillStyle="#3fb950";
+    for(let y=0;y<ph;y++)for(let x=0;x<pw;x++) if(skel[y*pw+x]) c.fillRect(x*sx, y*sy, Math.max(1,sx), Math.max(1,sy));
+  }
+  for(const r of rois){                                     // named regions
+    const x=r.x0*octx.width, y=r.y0*octx.height, w=(r.x1-r.x0)*octx.width, h=(r.y1-r.y0)*octx.height;
+    c.strokeStyle="#d29922"; c.lineWidth=2; c.strokeRect(x,y,w,h);
+    c.fillStyle="#d29922"; c.font="bold 12px system-ui";
+    c.fillText(r.name, x+4, y+14 > y+h ? y+h-4 : y+14);
+  }
+  if(roiDrag){ const {x0,y0,x1,y1}=roiDrag; c.strokeStyle="#f0b429"; c.setLineDash([5,4]);
+    c.strokeRect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0),Math.abs(y1-y0)); c.setLineDash([]); }
 }
+
+/* ---------- regions of interest (label roots by area, e.g. genotype) ---------- */
+let rois = [], roiMode = false, roiDrag = null, roiResults = [];
+$("roiDraw").onclick = () => { roiMode = !roiMode; $("roiDraw").classList.toggle("primary", roiMode);
+  $("roiHint").textContent = roiMode ? "drag a box on the image, then name it" : "Draw boxes to label roots by area — e.g. one box per genotype.";
+  octx.style.cursor = roiMode ? "crosshair" : "default"; };
+$("roiClear").onclick = () => { rois=[]; roiResults=[]; $("roiResults").hidden=true; $("measScope").textContent="(whole image)"; redrawOverlay(); };
+octx.addEventListener("mousedown", e => { if(!roiMode||!img) return; const r=octx.getBoundingClientRect();
+  roiDrag={x0:e.clientX-r.left, y0:e.clientY-r.top, x1:e.clientX-r.left, y1:e.clientY-r.top}; });
+octx.addEventListener("mousemove", e => { if(!roiDrag) return; const r=octx.getBoundingClientRect();
+  roiDrag.x1=e.clientX-r.left; roiDrag.y1=e.clientY-r.top; redrawOverlay(); });
+octx.addEventListener("mouseup", () => { if(!roiDrag) return; const d=roiDrag; roiDrag=null;
+  const x0=Math.min(d.x0,d.x1),y0=Math.min(d.y0,d.y1),x1=Math.max(d.x0,d.x1),y1=Math.max(d.y0,d.y1);
+  if(x1-x0<8||y1-y0<8){ redrawOverlay(); return; }
+  const name=prompt("Name this region (e.g. a genotype or factor):", `region ${rois.length+1}`);
+  if(name && name.trim()) rois.push({name:name.trim(), x0:x0/octx.width, y0:y0/octx.height, x1:x1/octx.width, y1:y1/octx.height});
+  redrawOverlay(); if(lastResult) measureROIs(); });
+
+function measureROIs(){
+  if(!rois.length || !lastResult){ $("roiResults").hidden=true; $("measScope").textContent="(whole image)"; return; }
+  const {skel,pw,ph}=lastResult;
+  roiResults = rois.map(r => {
+    const rx0=Math.max(0,Math.floor(r.x0*pw)), ry0=Math.max(0,Math.floor(r.y0*ph)),
+          rx1=Math.min(pw,Math.ceil(r.x1*pw)), ry1=Math.min(ph,Math.ceil(r.y1*ph));
+    const sub=new Uint8Array(pw*ph);
+    for(let y=ry0;y<ry1;y++)for(let x=rx0;x<rx1;x++) if(skel[y*pw+x]) sub[y*pw+x]=1;
+    return { name:r.name, traits: measure(sub, pw, ph, pxPerCm, lastResult.scale||1) };
+  });
+  const u = roiResults[0]?.traits.lengthUnit || "px";
+  $("roiTable").innerHTML = `<thead><tr><th>Region</th><th>Length</th><th>Tips</th><th>Br.</th><th>Angle°</th></tr></thead><tbody>`+
+    roiResults.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.traits.lengthVal.toFixed?x.traits.lengthVal.toFixed(2):x.traits.lengthVal} ${x.traits.lengthUnit}</td>`+
+      `<td>${x.traits.tips}</td><td>${x.traits.branches}</td><td>${x.traits.angle.toFixed(1)}</td></tr>`).join("")+`</tbody>`;
+  $("roiResults").hidden=false; $("measScope").textContent=`(+ ${rois.length} region${rois.length>1?"s":""})`;
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+$("roiSaveDb").onclick = async () => {
+  if(!roiResults.length) return;
+  const imgName = $("imgFile").files[0]?.name || $("demoImg").value || "image";
+  const recs = roiResults.map(x => { const rec = resultRecord(`${imgName} · ${x.name}`, x.traits);
+    rec.group = x.name; rec.thumb = thumbnail(); return rec; });
+  await AR_DB.saveMany(recs);
+  const n = await AR_DB.count();
+  $("roiSaveDb").textContent = `✓ saved ${recs.length} region(s) (${n} in DB)`;
+  setTimeout(()=>$("roiSaveDb").textContent="💾 Save regions to database", 2500);
+};
 function setTraits(t){
   $("tLen").textContent   = t ? t.length : "—";
   $("tTips").textContent  = t ? t.tips : "—";

@@ -58,6 +58,17 @@ engine + marker used, the calibration, and a thumbnail. **Nothing leaves your de
   RSML geometry, coloured by branching order; or the saved image for a live analysis), the full
   trait grid, and its H0 barcode. RSML rows also show a thumbnail sketch in the table.
 
+### Regions of interest — label roots by area (e.g. genotype)
+
+When one image holds more than one genotype or treatment (a common plate layout — e.g. the ABRS
+demo has two panels), you don't need to crop it. On the **Single** tab click **✏️ Draw region**,
+drag a box over each area, and name it (e.g. a genotype). After **Trace roots**, each region is
+**measured separately** — a *Per-region* table shows length/tips/branches/**angle** for each — and
+**Save regions to database** stores one record per region **tagged with the region name as its
+group**. Then the dashboard's group summary compares them directly (e.g. mean skew angle of a
+skewing genotype vs a non-skewing one). Regions persist across images of the same layout, so you
+can draw them once and apply the same boxes to each frame.
+
 ### Groups & group summaries
 
 - **Tick the checkboxes** on any rows (or *select all filtered*) and click **Group selected…** to

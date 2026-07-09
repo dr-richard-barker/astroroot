@@ -79,7 +79,12 @@
         <canvas id="overlay"></canvas>
       </div>
       <aside class="results">
-        <h3>Measurements</h3>
+        <div class="regionbar">
+          <button id="roiDraw" class="ghost">✏️ Draw region</button>
+          <button id="roiClear" class="ghost">Clear</button>
+          <div id="roiHint" class="hint">Draw boxes to label roots by area — e.g. one box per genotype.</div>
+        </div>
+        <h3>Measurements <span class="hint" id="measScope">(whole image)</span></h3>
         <table id="traits">
           <tr><td>Total root length</td><td id="tLen">—</td></tr>
           <tr><td>Root tips</td><td id="tTips">—</td></tr>
@@ -97,6 +102,11 @@
           <button id="pngBtn" class="ghost" disabled>Save overlay PNG</button>
         </div>
         <p class="method" id="methodNote"></p>
+        <div id="roiResults" hidden>
+          <h3 style="margin-top:14px">Per-region</h3>
+          <table id="roiTable" class="datatable"></table>
+          <button id="roiSaveDb" class="primary" style="margin-top:8px">💾 Save regions to database</button>
+        </div>
       </aside>
     </div>
   </section>

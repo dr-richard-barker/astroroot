@@ -41,6 +41,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #traits td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
 .editrow{margin-top:12px;display:flex;flex-direction:column;gap:3px}
+.regionbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--edge)}
+.regionbar .hint{flex-basis:100%;margin-top:2px}
+#roiResults .datatable{font-size:12px}
 .method{font-size:12px;color:var(--muted);margin-top:12px}
 .datatable{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
 .datatable th,.datatable td{border:1px solid var(--edge);padding:6px 8px;text-align:left}
