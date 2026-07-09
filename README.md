@@ -20,7 +20,9 @@ into one page that works on a school Chromebook. Part of the
 | **Single image** → traced overlay + measurements | ✅ |
 | **Batch** (many images → one CSV) | ✅ |
 | **Classical baseline** (Otsu threshold + Zhang–Suen thinning) | ✅ works with no model |
-| **Calibration** from the AstroCalibration marker (px → cm) | ✅ |
+| **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
+| **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
+| **Dashboard** — stats, charts, searchable table, CSV/JSON export | ✅ `dashboard.html` |
 | **CSV / RSML / PNG export** | ✅ |
 | **Train-your-own** (label → export dataset → cloud-train → re-import) | ✅ label + dataset export; training runs in the cloud |
 | **Arabidopsis RootNav 2.0 model** (ONNX, in-browser) | ✅ **ships in `models/`** — WebGPU (~1 s), WASM fallback |
@@ -64,9 +66,12 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 
 | File | What |
 |---|---|
-| `index.html` | UI — Single / Batch / Train / About tabs |
-| `app.js` | all logic — segmentation, thinning, measurement, exports, labelling, zip |
+| `index.html` | UI — Single / Batch / Train / About tabs + marker & save controls |
+| `app.js` | all logic — marker detect, segmentation, thinning, measurement, exports, labelling, zip |
+| `db.js` | IndexedDB wrapper (shared by app + dashboard) |
+| `dashboard.html` / `dashboard.js` | saved-results dashboard — stats, charts, table, export |
 | `style.css` | light/dark theming |
+| `docs/DATA_AND_DASHBOARD.md` | marker types (PlantCV parity), database & dashboard, cloud option |
 | `models/` | drop `arabidopsis.onnx` here (see `docs/MODEL_CONVERSION.md`) |
 | `docs/MODEL_CONVERSION.md` | export RootNav 2.0's Arabidopsis model to ONNX |
 | `docs/TRAINING.md` | the label → cloud-train → re-import workflow |

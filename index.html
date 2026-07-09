@@ -19,6 +19,7 @@
   <button class="tab" data-tab="batch" role="tab">Batch (folder)</button>
   <button class="tab" data-tab="train" role="tab">Train your own model</button>
   <button class="tab" data-tab="about" role="tab">About</button>
+  <a class="tab tablink" href="dashboard.html">📊 Dashboard</a>
 </nav>
 
 <main>
@@ -40,8 +41,25 @@
         <input type="file" id="imgFile" accept="image/*" />
       </div>
       <div class="ctl">
-        <label>3 · Scale</label>
-        <button id="calBtn" class="ghost">Set scale from marker…</button>
+        <label>3 · Marker / scale</label>
+        <select id="markerType" title="PlantCV-compatible marker types">
+          <option value="manual">Manual — click 2 points</option>
+          <optgroup label="Color card (PlantCV detect_color_card)">
+            <option value="classic">ColorChecker Classic (24)</option>
+            <option value="passport">ColorChecker Passport</option>
+            <option value="mini">ColorChecker Mini</option>
+            <option value="nano">ColorChecker Nano</option>
+            <option value="cameratrax">CameraTrax</option>
+            <option value="astro">AstroCalibration Spectrum</option>
+          </optgroup>
+          <option value="size">Size marker — known length</option>
+        </select>
+        <div class="row tight">
+          <button id="detectBtn" class="ghost" title="Auto-detect the card & normalise colour + scale">Auto-detect</button>
+          <button id="calBtn" class="ghost">Manual 2-pt</button>
+        </div>
+        <label class="mini" id="chipMMwrap" hidden>chip pitch (mm) <input type="number" id="chipMM" step="0.1" style="width:70px"></label>
+        <label class="mini"><input type="checkbox" id="colorCorrect" checked> colour-correct</label>
         <span id="calStatus" class="hint">not calibrated (results in px)</span>
       </div>
       <div class="ctl">
@@ -68,6 +86,7 @@
           <span class="hint">click to add a tip · shift-click a trace to delete</span>
         </div>
         <div class="btnrow">
+          <button id="saveDbBtn" class="primary" disabled>💾 Save to database</button>
           <button id="csvBtn" class="ghost" disabled>Download CSV</button>
           <button id="rsmlBtn" class="ghost" disabled>Download RSML</button>
           <button id="pngBtn" class="ghost" disabled>Save overlay PNG</button>
@@ -107,6 +126,7 @@
       <tbody></tbody>
     </table>
     <div class="btnrow">
+      <button id="batchSaveDb" class="primary" disabled>💾 Save all to database</button>
       <button id="batchCsv" class="ghost" disabled>Download results CSV</button>
     </div>
   </section>
@@ -187,6 +207,7 @@
   <span>AstroRoot · BSD-3-Clause · your images stay on your device</span>
 </footer>
 
+<script src="db.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

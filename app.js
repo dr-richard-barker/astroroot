@@ -66,6 +66,121 @@ $("calBtn").onclick = () => {
   };
 };
 
+/* ================= MARKER AUTODETECT (PlantCV-compatible) =================
+ * Detects a colour card in the frame and derives BOTH a colour correction and the px->cm
+ * scale from the known chip pitch — mirroring PlantCV's detect_color_card(color_chip_size=…).
+ * This is a PlantCV-*compatible* in-browser detector (same card types + reference matrix),
+ * not the Python code itself; the Python/cloud path can run PlantCV exactly. */
+const CARD_SPECS = {   // rows x cols of chips, default centre-to-centre pitch (mm, editable)
+  classic:   {rows:4, cols:6, pitchMM:40.6, refs:true},
+  passport:  {rows:4, cols:6, pitchMM:12.5},
+  mini:      {rows:4, cols:6, pitchMM:13.0},
+  nano:      {rows:4, cols:6, pitchMM:5.0},
+  cameratrax:{rows:4, cols:6, pitchMM:8.0},
+  astro:     {rows:4, cols:6, pitchMM:10.0},   // AstroCalibration Spectrum (edit to your sticker)
+};
+// standard ColorChecker Classic sRGB references (row-major, 24 patches)
+const REF24 = [[115,82,68],[194,150,130],[98,122,157],[87,108,67],[133,128,177],[103,189,170],
+  [214,126,44],[80,91,166],[193,90,99],[94,60,108],[157,188,64],[224,163,46],
+  [56,61,150],[70,148,73],[175,54,60],[231,199,31],[187,86,149],[8,133,161],
+  [243,243,242],[200,200,200],[160,160,160],[122,122,122],[85,85,85],[52,52,52]];
+
+let activeCorrection = null;   // {gain:[3], bias:[3]} colour correction applied before segmentation
+let markerInfo = null;         // {type, pxPerCm, colorCorrected} recorded with saved results
+
+function detectColorCard(rgba, w, h, spec){
+  // 1. coarse "colourfulness" map -> bounding box of the busiest (card) region
+  const G = 48, cw = Math.max(1,(w/G)|0), ch = Math.max(1,(h/G)|0);
+  const gx = Math.ceil(w/cw), gy = Math.ceil(h/ch);
+  const score = new Float32Array(gx*gy);
+  for(let cyi=0;cyi<gy;cyi++)for(let cxi=0;cxi<gx;cxi++){
+    let n=0,sr=0,sg=0,sb=0,sr2=0,sg2=0,sb2=0;
+    for(let y=cyi*ch;y<Math.min(h,(cyi+1)*ch);y+=2)for(let x=cxi*cw;x<Math.min(w,(cxi+1)*cw);x+=2){
+      const p=(y*w+x)*4, r=rgba[p],g=rgba[p+1],b=rgba[p+2];
+      n++; sr+=r;sg+=g;sb+=b; sr2+=r*r;sg2+=g*g;sb2+=b*b;
+    }
+    if(!n) continue;
+    const v=(sr2/n-(sr/n)**2)+(sg2/n-(sg/n)**2)+(sb2/n-(sb/n)**2);
+    score[cyi*gx+cxi]=Math.sqrt(Math.max(0,v));
+  }
+  let mx=0; for(const s of score) mx=Math.max(mx,s);
+  const thr=mx*0.35; if(mx<8) return {ok:false};
+  let x0=gx,y0=gy,x1=-1,y1=-1,hot=0;
+  for(let cyi=0;cyi<gy;cyi++)for(let cxi=0;cxi<gx;cxi++) if(score[cyi*gx+cxi]>=thr){
+    hot++; x0=Math.min(x0,cxi);y0=Math.min(y0,cyi);x1=Math.max(x1,cxi);y1=Math.max(y1,cyi);
+  }
+  if(hot<4) return {ok:false};
+  const bbox={x:x0*cw, y:y0*ch, w:(x1-x0+1)*cw, h:(y1-y0+1)*ch};
+  // 2. sample rows x cols chip colours at cell centres
+  const chips=[];
+  for(let r=0;r<spec.rows;r++)for(let c=0;c<spec.cols;c++){
+    const px=bbox.x+(c+0.5)*bbox.w/spec.cols, py=bbox.y+(r+0.5)*bbox.h/spec.rows;
+    let n=0,ar=0,ag=0,ab=0, rad=Math.max(2,(Math.min(bbox.w/spec.cols,bbox.h/spec.rows)/6)|0);
+    for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){
+      const xx=(px+dx)|0, yy=(py+dy)|0; if(xx<0||yy<0||xx>=w||yy>=h) continue;
+      const p=(yy*w+xx)*4; ar+=rgba[p];ag+=rgba[p+1];ab+=rgba[p+2];n++;
+    }
+    chips.push([ar/n,ag/n,ab/n]);
+  }
+  return {ok:true, bbox, chips, spec};
+}
+
+function deriveCorrection(chips, spec){
+  // classic card with references -> per-channel linear fit detected->reference; else grey-world white balance
+  if(spec.refs && chips.length===REF24.length){
+    const gain=[1,1,1], bias=[0,0,0];
+    for(let ch=0;ch<3;ch++){
+      let sx=0,sy=0,sxx=0,sxy=0,n=chips.length;
+      for(let i=0;i<n;i++){ const x=chips[i][ch], y=REF24[i][ch]; sx+=x;sy+=y;sxx+=x*x;sxy+=x*y; }
+      const d=n*sxx-sx*sx; if(Math.abs(d)>1e-6){ gain[ch]=(n*sxy-sx*sy)/d; bias[ch]=(sy-gain[ch]*sx)/n; }
+    }
+    return {gain, bias};
+  }
+  // grey-world: use low-saturation (neutral) chips, scale channels so their mean is grey
+  const neutral=chips.filter(c=>{ const mx=Math.max(...c),mn=Math.min(...c); return mx-mn < 22; });
+  const use=neutral.length>=2?neutral:chips;
+  const mean=[0,0,0]; for(const c of use){ mean[0]+=c[0];mean[1]+=c[1];mean[2]+=c[2]; }
+  mean.forEach((_,i)=>mean[i]/=use.length);
+  const grey=(mean[0]+mean[1]+mean[2])/3;
+  return {gain:[grey/(mean[0]||1),grey/(mean[1]||1),grey/(mean[2]||1)], bias:[0,0,0]};
+}
+function applyCorrection(rgba, corr){
+  const {gain,bias}=corr;
+  for(let i=0;i<rgba.length;i+=4){
+    rgba[i]  =Math.max(0,Math.min(255, rgba[i]*gain[0]+bias[0]));
+    rgba[i+1]=Math.max(0,Math.min(255, rgba[i+1]*gain[1]+bias[1]));
+    rgba[i+2]=Math.max(0,Math.min(255, rgba[i+2]*gain[2]+bias[2]));
+  }
+}
+
+/* marker UI */
+$("markerType").onchange = () => {
+  const t=$("markerType").value, spec=CARD_SPECS[t];
+  $("chipMMwrap").hidden = !(spec || t==="size");
+  if(spec) $("chipMM").value = spec.pitchMM;
+  else if(t==="size") $("chipMM").value = "";
+  $("detectBtn").disabled = !spec;
+};
+$("detectBtn").onclick = () => {
+  if(!img){ alert("Load a photo first."); return; }
+  const t=$("markerType").value, spec=CARD_SPECS[t]; if(!spec) return;
+  const full = getImagePixels(img, imgW, imgH);
+  const det = detectColorCard(full, imgW, imgH, spec);
+  if(!det.ok){ $("calStatus").textContent = "card not found — try Manual 2-pt"; activeCorrection=null; return; }
+  // scale from chip pitch
+  const chipMM = parseFloat($("chipMM").value) || spec.pitchMM;
+  const cellWpx = det.bbox.w / spec.cols;
+  pxPerCm = cellWpx / (chipMM/10);
+  // colour correction
+  if($("colorCorrect").checked){ activeCorrection = deriveCorrection(det.chips, spec); }
+  else activeCorrection = null;
+  markerInfo = {type:t, pxPerCm, colorCorrected: !!activeCorrection};
+  // draw bbox on overlay
+  const c=octx.getContext("2d"); const sx=octx.width/imgW, sy=octx.height/imgH;
+  c.strokeStyle="#58a6ff"; c.lineWidth=2; c.strokeRect(det.bbox.x*sx, det.bbox.y*sy, det.bbox.w*sx, det.bbox.h*sy);
+  $("calStatus").textContent = `card found · ${pxPerCm.toFixed(1)} px/cm` + (activeCorrection?" · colour-corrected":"");
+};
+
 /* ---------- model selection ---------- */
 $("modelSelect").onchange = e => pickModel(e.target.value, $("modelStatus"), $("modelFile"));
 $("batchModel").onchange = e => pickModel(e.target.value, null, null);
@@ -102,6 +217,7 @@ function loadScript(src){ return new Promise((res,rej)=>{const s=document.create
 $("runBtn").onclick = async () => {
   $("runBtn").disabled = true; $("runBtn").textContent = "tracing…";
   const P = prepImage(img, imgW, imgH);                     // cap working resolution
+  if(activeCorrection && $("colorCorrect").checked) applyCorrection(P.rgba, activeCorrection);  // PlantCV-style colour norm
   let mask;
   if(ortSession){ try{ mask = await segmentOnnx(P.rgba, P.w, P.h); } catch(e){ console.warn(e); mask = segmentClassical(P.rgba, P.w, P.h); } }
   else mask = segmentClassical(P.rgba, P.w, P.h);
@@ -113,9 +229,31 @@ $("runBtn").onclick = async () => {
   $("methodNote").textContent = ortSession
     ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
-  ["csvBtn","rsmlBtn","pngBtn"].forEach(b => $(b).disabled = false);
+  ["csvBtn","rsmlBtn","pngBtn","saveDbBtn"].forEach(b => $(b).disabled = false);
   $("editRow").hidden = false;
   $("runBtn").disabled = false; $("runBtn").textContent = "Trace roots";
+};
+
+/* ---------- save to local database ---------- */
+function thumbnail(){
+  const t=document.createElement("canvas"); const s=Math.min(1,140/cv.width); t.width=cv.width*s; t.height=cv.height*s;
+  const x=t.getContext("2d"); x.drawImage(cv,0,0,t.width,t.height); x.drawImage(octx,0,0,t.width,t.height);
+  return t.toDataURL("image/jpeg",0.6);
+}
+function resultRecord(name, traits){
+  return { ts: Date.now(), name: name||"seedling",
+    engine: ortSession?`RootNav2 (${ortBackend})`:"classical",
+    marker: markerInfo ? markerInfo.type : "manual", pxPerCm: pxPerCm||null, colorCorrected: !!(activeCorrection&&$("colorCorrect").checked),
+    lengthVal: traits.lengthVal, lengthUnit: traits.lengthUnit, tips: traits.tips, branches: traits.branches, angle: +traits.angle.toFixed(1),
+    thumb: null };
+}
+$("saveDbBtn").onclick = async () => {
+  if(!lastResult) return;
+  const rec = resultRecord($("imgFile").files[0]?.name, lastResult.traits); rec.thumb = thumbnail();
+  await AR_DB.save(rec);
+  const n = await AR_DB.count();
+  $("saveDbBtn").textContent = `✓ saved (${n} in DB)`;
+  setTimeout(()=>$("saveDbBtn").textContent="💾 Save to database", 2500);
 };
 
 /* ---------- image -> grayscale pixel array ---------- */
@@ -333,7 +471,17 @@ $("batchRun").onclick = async () => {
     tbody.appendChild(tr);
   }
   $("batchProgress").textContent = `done — ${files.length} images.`;
-  $("batchCsv").disabled = false;
+  $("batchCsv").disabled = false; $("batchSaveDb").disabled = batchRows.length===0;
+};
+$("batchSaveDb").onclick = async () => {
+  const eng = ortSession?`RootNav2 (${ortBackend})`:"classical";
+  const recs = batchRows.map(r => ({ ts: Date.now(), name: r.name, engine: eng, marker: "batch",
+    pxPerCm: parseFloat($("batchScale").value)||null, colorCorrected:false,
+    lengthVal:r.lengthVal, lengthUnit:r.lengthUnit, tips:r.tips, branches:r.branches, angle:+r.angle.toFixed(1), thumb:null }));
+  await AR_DB.saveMany(recs);
+  const n = await AR_DB.count();
+  $("batchSaveDb").textContent = `✓ saved ${recs.length} (${n} in DB)`;
+  setTimeout(()=>$("batchSaveDb").textContent="💾 Save all to database", 2500);
 };
 function processFile(file, ppc){
   return new Promise(res => { const im=new Image(); im.onload=async()=>{

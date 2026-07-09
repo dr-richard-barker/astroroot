@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AstroRoot — Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>📊 AstroRoot Dashboard</h1>
+  <p class="tag">Your saved root measurements — on this device. <a href="index.html">← back to the tool</a></p>
+</header>
+
+<main>
+  <div class="btnrow" style="margin-bottom:14px">
+    <input type="search" id="search" placeholder="filter by name / engine / marker…" style="min-width:220px" />
+    <span style="flex:1"></span>
+    <button id="expCsv" class="ghost">Export CSV</button>
+    <button id="expJson" class="ghost">Export JSON (backup)</button>
+    <label class="ghost btnlink" style="border:1px solid var(--edge);padding:8px 14px;border-radius:8px;cursor:pointer">
+      Import JSON <input type="file" id="impJson" accept=".json" hidden />
+    </label>
+    <button id="clearDb" class="ghost" style="color:#f85149">Clear all</button>
+  </div>
+
+  <section id="empty" class="panel" style="display:none">
+    <p class="method">No saved measurements yet. Analyse an image in the
+      <a href="index.html">tool</a> and click <b>Save to database</b>.</p>
+  </section>
+
+  <section id="content" style="display:none">
+    <div id="stats" class="statgrid"></div>
+    <div class="chartrow">
+      <div class="chartbox"><h3>Root length distribution</h3><div id="chartLen"></div></div>
+      <div class="chartbox"><h3>Tips vs length</h3><div id="chartScatter"></div></div>
+    </div>
+    <table class="datatable" id="tbl">
+      <thead><tr>
+        <th></th>
+        <th data-sort="name">Name</th><th data-sort="ts">Date</th><th data-sort="engine">Engine</th>
+        <th data-sort="marker">Marker</th><th data-sort="lengthVal">Length</th>
+        <th data-sort="tips">Tips</th><th data-sort="branches">Br.</th><th data-sort="angle">Angle°</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<footer><span>AstroRoot Dashboard · data stored locally in your browser (IndexedDB)</span></footer>
+
+<script src="db.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
