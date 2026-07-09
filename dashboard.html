@@ -15,7 +15,11 @@
 <main>
   <div class="btnrow" style="margin-bottom:14px">
     <input type="search" id="search" placeholder="filter by name / engine / marker…" style="min-width:220px" />
-    <button id="loadSamples" class="ghost" title="Load the 18-way skew RootNav dataset">🌱 Load sample data</button>
+    <select id="sampleSet" title="Bundled demo datasets">
+      <option value="skew">18-way skew (53 RootNav plates)</option>
+      <option value="stereotypes">Extreme stereotypes (5, archidart-style)</option>
+    </select>
+    <button id="loadSamples" class="ghost" title="Load the selected demo dataset">🌱 Load</button>
     <label class="ghost btnlink" style="border:1px solid var(--edge);padding:8px 14px;border-radius:8px;cursor:pointer" title="Import RootNav .rsml files">
       Import RSML <input type="file" id="impRsml" accept=".rsml" multiple hidden />
     </label>
@@ -70,6 +74,15 @@
       </tr></thead>
       <tbody></tbody>
     </table>
+
+    <div id="detail" class="detailbox" style="display:none">
+      <div class="btnrow" style="justify-content:space-between">
+        <h3 id="detailName" style="margin:0"></h3>
+        <button id="detailClose" class="ghost" style="padding:2px 10px">✕</button>
+      </div>
+      <div id="detailTraits" class="traitgrid"></div>
+      <div id="detailBarcode"></div>
+    </div>
   </section>
 </main>
 

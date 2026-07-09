@@ -48,10 +48,17 @@ engine + marker used, the calibration, and a thumbnail. **Nothing leaves your de
   to show immediately. Records use stable ids, so loading twice won't duplicate. (Source:
   [`18_way_skew`](https://github.com/dr-richard-barker/image-analysis-software-and-R-codes/tree/master/18_way_skew).)
 - **Import RSML** reads any RootNav `.rsml` files (from RootNav 1 / 2.0 / RootNav-Viewer) and
-  measures them — per-plate mean primary-root length, root (tip) count, lateral (branch) count,
-  and mean tip angle from vertical (the skew) — then adds them to your database. RSML in
-  **pixel** units is stored in px (no cm scale); the charts adapt to whatever unit is present.
-  Parser: `rsml.js` (matches the sample generator).
+  computes the full **[archiDART-comparable trait set](ARCHIDART_PARITY.md)**: total & per-order
+  root length, # first-order/lateral roots, lateral density, height/width, convex-hull area,
+  diameter → surface/volume (if the RSML carries a diameter function), tortuosity, the Fitter
+  topological indices (magnitude, altitude, external path length), and a simplified **H0
+  geodesic persistence barcode**. Units come from the RSML metadata (unit + resolution → cm; or
+  px). Parser: `rsml.js`.
+- **Click any table row** to open the record detail — the full trait grid and its H0 barcode.
+- **Extreme stereotypes** (in the *Load sample data* menu) drops in five architectures at the
+  corners of the trait space — tap-dominant, herringbone, dichotomous, shallow-spreading,
+  fibrous — to show how the traits and barcodes differ (in the spirit of the archiDART v3.0
+  topology paper; AstroRoot-authored RSML, not that paper's exact files).
 
 ## Cloud sync — Supabase (metadata only)
 

@@ -22,7 +22,8 @@ into one page that works on a school Chromebook. Part of the
 | **Classical baseline** (Otsu threshold + Zhang–Suen thinning) | ✅ works with no model |
 | **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
 | **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
-| **Dashboard** — stats, charts, searchable table, CSV/JSON export | ✅ `dashboard.html` |
+| **archiDART-comparable RSA traits** from RSML — TRL, per-order lengths, hull, surface/volume, tortuosity, Fitter topology, H0 barcode | ✅ [`docs/ARCHIDART_PARITY.md`](docs/ARCHIDART_PARITY.md) |
+| **Dashboard** — stats, charts, searchable table, per-record detail + barcode, CSV/JSON export | ✅ `dashboard.html` |
 | **Cloud sync** — pool measurements to Supabase (metadata only, RLS) | ✅ opt-in; keys stay in your browser |
 | **CSV / RSML / PNG export** | ✅ |
 | **Train-your-own** (label → export dataset → cloud-train → re-import) | ✅ label + dataset export; training runs in the cloud |
@@ -71,8 +72,10 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `app.js` | all logic — marker detect, segmentation, thinning, measurement, exports, labelling, zip |
 | `db.js` | IndexedDB wrapper (shared by app + dashboard) |
 | `cloud.js` | Supabase REST sync — metadata only, keys via localStorage |
-| `rsml.js` | RootNav RSML parser → measurements (dashboard RSML import) |
+| `rsml.js` | RSML parser + archiDART-comparable trait engine (nested roots, diameter, topology) |
 | `samples/18_way_skew.json` | bundled sample dataset (53 RootNav skew plates) |
+| `samples/stereotypes/*.rsml` | 5 extreme-stereotype architectures (archidart-style demo) |
+| `docs/ARCHIDART_PARITY.md` | honest map of archiDART trait coverage |
 | `supabase/schema.sql` | table + Row Level Security to run in your Supabase project |
 | `dashboard.html` / `dashboard.js` | saved-results dashboard — stats, charts, table, export |
 | `style.css` | light/dark theming |

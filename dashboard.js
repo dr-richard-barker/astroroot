@@ -72,7 +72,45 @@ function renderTable(rows){
     <td><button class="ghost del" data-id="${r.id}" title="delete" style="padding:2px 8px">✕</button></td>
   </tr>`).join("");
   tb.querySelectorAll(".del").forEach(b=>b.onclick=async e=>{ e.stopPropagation(); await AR_DB.remove(b.dataset.id); load(); });
+  tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>showDetail(RECORDS.find(r=>r.id===tr.dataset.id)));
 }
+
+/* ---------- per-record detail (archiDART trait set + H0 barcode) ---------- */
+const ARCH_LABELS = {
+  TRL:"Total root length (TRL)", L1R:"1st-order length (L1R)", TN1R:"# 1st-order roots (TN1R)",
+  TNLR:"# lateral roots (TNLR)", TLRL:"Total lateral length (TLRL)", MLR:"Mean lateral length",
+  N2LR:"# 2nd-order (N2LR)", D2LR:"Lateral density (D2LR)", maxOrder:"Max branching order",
+  height:"Height / depth", width:"Width", convexHullXY:"Convex hull area (XY)",
+  MDLR:"Mean lateral diameter", Stot:"Total surface (Stot)", Vtot:"Total volume (Vtot)",
+  tortuosity:"Tortuosity", magnitude:"Magnitude (# tips)", altitude:"Altitude",
+  extPathLength:"Ext. path length", maxPersistence:"Max persistence", totalPersistence:"Total persistence"
+};
+function showDetail(rec){
+  if(!rec) return;
+  $("detail").style.display="block";
+  $("detailName").textContent = `${rec.name} — ${rec.engine}`;
+  const a = rec.arch;
+  if(!a){ $("detailTraits").innerHTML = `<p class="method">This record has basic traits only (length ${rec.lengthVal} ${rec.lengthUnit}, tips ${rec.tips}, branches ${rec.branches}, angle ${rec.angle}°). Import RSML for the full archiDART trait set.</p>`; $("detailBarcode").innerHTML=""; $("detail").scrollIntoView({behavior:"smooth",block:"nearest"}); return; }
+  const u = rec.lengthUnit;
+  const cells = Object.keys(ARCH_LABELS).filter(k=>a[k]!=null).map(k=>{
+    let v=a[k]; const unit = /length|height|width|altitude|persistence|MLR|L1R|TRL|TLRL/.test(k)?` ${u}`:
+      k==="convexHullXY"?` ${u}²`:k==="Stot"?` ${u}²`:k==="Vtot"?` ${u}³`:k==="D2LR"?` /${u}`:k==="MDLR"?` ${u}`:"";
+    return `<div class="trait"><div class="tval">${v}${unit}</div><div class="tlbl">${ARCH_LABELS[k]}</div></div>`;
+  }).join("");
+  $("detailTraits").innerHTML = cells;
+  // H0 geodesic persistence barcode
+  const bars=a.barcode||[]; if(bars.length){
+    const W=380,H=Math.min(240,18+bars.length*7),pad=6, maxB=Math.max(...bars.map(b=>b.birth))||1;
+    const sorted=bars.slice().sort((x,y)=>(y.birth-y.death)-(x.birth-x.death));
+    const rows=sorted.map((b,i)=>{ const y=12+i*7, x1=pad+(W-2*pad)*b.death/maxB, x2=pad+(W-2*pad)*b.birth/maxB;
+      return `<line x1="${x1.toFixed(1)}" y1="${y}" x2="${x2.toFixed(1)}" y2="${y}" stroke="var(--accent2)" stroke-width="3"/>`; }).join("");
+    $("detailBarcode").innerHTML = `<h3 style="font-size:13px;margin:14px 0 4px">H0 persistence barcode (geodesic distance, ${u})</h3>`+
+      `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${rows}`+
+      `<line x1="${pad}" y1="${H-3}" x2="${W-pad}" y2="${H-3}" stroke="var(--edge)"/><text x="${W-pad}" y="${H-6}" font-size="9" fill="var(--muted)" text-anchor="end">${maxB.toFixed(1)} ${u}</text></svg>`;
+  } else $("detailBarcode").innerHTML="";
+  $("detail").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+$("detailClose").onclick = ()=>$("detail").style.display="none";
 function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 /* sorting */
@@ -82,17 +120,33 @@ document.querySelector("#tbl thead").onclick = e=>{ const k=e.target.dataset.sor
 
 /* controls */
 $("search").oninput = e=>{ filter=e.target.value; render(); };
-$("expCsv").onclick = ()=>{ const rows=view(); let csv="name,date,engine,marker,px_per_cm,length,unit,color_corrected,tips,branches,angle\n";
-  rows.forEach(r=>csv+=`${r.name},${fmtDate(r.ts)},${r.engine},${r.marker},${r.pxPerCm||""},${r.lengthVal},${r.lengthUnit},${r.colorCorrected?1:0},${r.tips},${r.branches},${r.angle}\n`);
+$("expCsv").onclick = ()=>{ const rows=view();
+  const A=["TRL","L1R","TN1R","TNLR","TLRL","MLR","D2LR","maxOrder","height","width","convexHullXY","MDLR","Stot","Vtot","tortuosity","magnitude","altitude","extPathLength","maxPersistence"];
+  let csv="name,date,engine,marker,px_per_cm,length,unit,color_corrected,tips,branches,angle,"+A.join(",")+"\n";
+  rows.forEach(r=>{ const a=r.arch||{};
+    csv+=`${r.name},${fmtDate(r.ts)},${r.engine},${r.marker},${r.pxPerCm||""},${r.lengthVal},${r.lengthUnit},${r.colorCorrected?1:0},${r.tips},${r.branches},${r.angle},`+
+      A.map(k=>a[k]!=null?a[k]:"").join(",")+"\n"; });
   dl("astroroot_database.csv", csv, "text/csv"); };
 $("expJson").onclick = async ()=>dl("astroroot_backup.json", await AR_DB.exportJSON(), "application/json");
 $("impJson").onchange = async e=>{ const f=e.target.files[0]; if(!f) return; const n=await AR_DB.importJSON(await f.text()); alert(`Imported ${n} records.`); load(); };
 $("clearDb").onclick = async ()=>{ if(confirm("Delete ALL saved measurements from this device?")){ await AR_DB.clear(); load(); } };
+const STEREOTYPES = ["tap_dominant","herringbone","dichotomous","shallow_spreading","fibrous_monocot"];
 $("loadSamples").onclick = async ()=>{
   try{
-    const res = await fetch("samples/18_way_skew.json"); const obj = await res.json();
-    const n = await AR_DB.saveMany(obj.records);   // stable ids -> re-loading won't duplicate
-    alert(`Loaded ${n} sample records (18-way skew, RootNav RSML).`); load();
+    if($("sampleSet").value === "skew"){
+      const obj = await (await fetch("samples/18_way_skew.json")).json();
+      const n = await AR_DB.saveMany(obj.records);
+      alert(`Loaded ${n} records (18-way skew, RootNav RSML).`);
+    } else {
+      const recs=[];
+      for(const nm of STEREOTYPES){
+        const rec = AR_RSML.parse(await (await fetch(`samples/stereotypes/${nm}.rsml`)).text(), nm+".rsml");
+        if(rec){ rec.id = "sample_stereo_"+nm; recs.push(rec); }
+      }
+      await AR_DB.saveMany(recs);
+      alert(`Loaded ${recs.length} extreme-stereotype architectures (archidart-style traits).`);
+    }
+    load();
   }catch(e){ alert("Could not load sample data: "+e.message); }
 };
 $("impRsml").onchange = async e=>{

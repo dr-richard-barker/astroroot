@@ -5,3 +5,4 @@ models/*.onnx
 .DS_Store
 vendor/
 _test_realroot.jpg
+_test_mono.rsml
