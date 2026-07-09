@@ -1,0 +1,173 @@
+{
+  "source": "TICTOC cotton spaceflight RSML (Data/Final_RSML_format), day 6 subset",
+  "files": [
+    {
+      "file": "A68_a12_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "A68",
+      "well": "a12",
+      "day": 6
+    },
+    {
+      "file": "A68_b2_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "A68",
+      "well": "b2",
+      "day": 6
+    },
+    {
+      "file": "D130_a6_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "D130",
+      "well": "a6",
+      "day": 6
+    },
+    {
+      "file": "D130_c11_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "D130",
+      "well": "c11",
+      "day": 6
+    },
+    {
+      "file": "D130_d11_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "D130",
+      "well": "d11",
+      "day": 6
+    },
+    {
+      "file": "WT_a10_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "a10",
+      "day": 6
+    },
+    {
+      "file": "WT_a3_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "a3",
+      "day": 6
+    },
+    {
+      "file": "WT_a9_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "a9",
+      "day": 6
+    },
+    {
+      "file": "WT_b10_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "b10",
+      "day": 6
+    },
+    {
+      "file": "WT_c10_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "c10",
+      "day": 6
+    },
+    {
+      "file": "WT_d10_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "d10",
+      "day": 6
+    },
+    {
+      "file": "WT_d5_FL_6.rsml",
+      "group": "Flight",
+      "genotype": "WT",
+      "well": "d5",
+      "day": 6
+    },
+    {
+      "file": "A68_a4_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "A68",
+      "well": "a4",
+      "day": 6
+    },
+    {
+      "file": "A68_b12_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "A68",
+      "well": "b12",
+      "day": 6
+    },
+    {
+      "file": "D130_b1_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "D130",
+      "well": "b1",
+      "day": 6
+    },
+    {
+      "file": "D130_c6_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "D130",
+      "well": "c6",
+      "day": 6
+    },
+    {
+      "file": "D130_c7_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "D130",
+      "well": "c7",
+      "day": 6
+    },
+    {
+      "file": "D130_d1_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "D130",
+      "well": "d1",
+      "day": 6
+    },
+    {
+      "file": "WT_a5_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "WT",
+      "well": "a5",
+      "day": 6
+    },
+    {
+      "file": "WT_a9_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "WT",
+      "well": "a9",
+      "day": 6
+    },
+    {
+      "file": "WT_c3_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "WT",
+      "well": "c3",
+      "day": 6
+    },
+    {
+      "file": "WT_c9_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "WT",
+      "well": "c9",
+      "day": 6
+    },
+    {
+      "file": "WT_d3_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "WT",
+      "well": "d3",
+      "day": 6
+    },
+    {
+      "file": "WT_d9_GC_6.rsml",
+      "group": "Ground",
+      "genotype": "WT",
+      "well": "d9",
+      "day": 6
+    }
+  ]
+}

@@ -54,7 +54,25 @@ engine + marker used, the calibration, and a thumbnail. **Nothing leaves your de
   topological indices (magnitude, altitude, external path length), and a simplified **H0
   geodesic persistence barcode**. Units come from the RSML metadata (unit + resolution → cm; or
   px). Parser: `rsml.js`.
-- **Click any table row** to open the record detail — the full trait grid and its H0 barcode.
+- **Click any table row** to open the record detail — a **drawing of the root system** (from the
+  RSML geometry, coloured by branching order; or the saved image for a live analysis), the full
+  trait grid, and its H0 barcode. RSML rows also show a thumbnail sketch in the table.
+
+### Groups & group summaries
+
+- **Tick the checkboxes** on any rows (or *select all filtered*) and click **Group selected…** to
+  tag them as a named group; **Ungroup** clears it. A **Group summary** table shows per-group
+  means (length, TRL, tips, branches, angle), and the **show group** filter narrows the table to
+  one group. Groups are saved with the records (and included in CSV/JSON export and cloud sync).
+- Great for a Flight-vs-Ground or genotype comparison: load a dataset, group it, read the summary.
+
+### TICTOC cotton (Flight vs Ground)
+
+**Load sample data → TICTOC cotton** loads 24 real cotton root systems from the ISS
+[TICTOC study](https://github.com/dr-richard-barker/TICTOC) (`Data/Final_RSML_format`, day-6
+subset, genotypes WT/A68/D130), **pre-grouped Flight vs Ground** so the group summary is populated
+immediately. *Caveat:* these SmartRoot RSML carry a nominal `resolution`, so **absolute lengths
+are uncalibrated** — read the **Flight-vs-Ground contrast**, not the absolute cm.
 - **Extreme stereotypes** (in the *Load sample data* menu) drops in AstroRoot's own set of five
   reference architectures at the corners of the trait space — tap-dominant, herringbone,
   dichotomous, shallow-spreading, fibrous — to show how the traits and barcodes differ. They're

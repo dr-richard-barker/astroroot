@@ -2,7 +2,8 @@
  * Inspired by RootNav-Viewer 2.0 (collection browse -> search -> per-item measurements),
  * reimagined as a dependency-free web page. */
 const $ = id => document.getElementById(id);
-let RECORDS = [], sortKey = "ts", sortDir = -1, filter = "";
+let RECORDS = [], sortKey = "ts", sortDir = -1, filter = "", groupSel = "";
+const selected = new Set();
 
 async function load(){
   RECORDS = await AR_DB.all();
@@ -10,9 +11,10 @@ async function load(){
 }
 function view(){
   const f = filter.toLowerCase();
-  let rows = RECORDS.filter(r => !f || `${r.name} ${r.engine} ${r.marker}`.toLowerCase().includes(f));
-  rows.sort((a,b)=>{ const x=a[sortKey], y=b[sortKey];
-    return (x<y?-1:x>y?1:0)*sortDir * (typeof x==="string"?1:1); });
+  let rows = RECORDS.filter(r => (!f || `${r.name} ${r.engine} ${r.marker} ${r.group||""}`.toLowerCase().includes(f))
+                              && (!groupSel || (r.group||"")===groupSel));
+  rows.sort((a,b)=>{ const x=a[sortKey]??"", y=b[sortKey]??"";
+    return (x<y?-1:x>y?1:0)*sortDir; });
   return rows;
 }
 function render(){
@@ -21,7 +23,38 @@ function render(){
   $("content").style.display = has?"block":"none";
   if(!has) return;
   const rows = view();
+  populateGroupFilter();
+  renderGroupSummary();
   renderStats(rows); renderCharts(rows); renderTable(rows);
+  updateSelUI();
+}
+function groups(){ return [...new Set(RECORDS.map(r=>r.group).filter(Boolean))].sort(); }
+function populateGroupFilter(){
+  const gf=$("groupFilter"), cur=gf.value;
+  gf.innerHTML = `<option value="">all</option>` + groups().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
+  gf.value = cur;
+}
+function updateSelUI(){
+  $("selCount").textContent = `${selected.size} selected`;
+  $("makeGroup").disabled = selected.size===0;
+  $("ungroup").disabled = selected.size===0;
+}
+function renderGroupSummary(){
+  const gs = groups();
+  if(!gs.length){ $("groupSummary").innerHTML=""; return; }
+  const rowsFor = g => RECORDS.filter(r=>r.group===g);
+  const m = a => a.length? (a.reduce((s,v)=>s+v,0)/a.length):0;
+  const col = (g)=>{ const rr=rowsFor(g); const cm=rr.filter(r=>r.lengthUnit==="cm").map(r=>r.lengthVal);
+    const trl=rr.map(r=>r.arch?.TRL).filter(v=>v!=null);
+    return `<tr><td><b>${esc(g)}</b></td><td>${rr.length}</td>`+
+      `<td>${cm.length?m(cm).toFixed(2)+" cm":"—"}</td>`+
+      `<td>${trl.length?m(trl).toFixed(1):"—"}</td>`+
+      `<td>${m(rr.map(r=>r.tips)).toFixed(1)}</td>`+
+      `<td>${m(rr.map(r=>r.branches)).toFixed(1)}</td>`+
+      `<td>${m(rr.map(r=>r.angle)).toFixed(1)}°</td></tr>`; };
+  $("groupSummary").innerHTML = `<h3 style="margin:4px 0 6px;font-size:15px">Group summary</h3>`+
+    `<table class="datatable"><thead><tr><th>Group</th><th>n</th><th>Mean length</th><th>Mean TRL</th><th>Mean tips</th><th>Mean branches</th><th>Mean angle</th></tr></thead>`+
+    `<tbody>${gs.map(col).join("")}</tbody></table>`;
 }
 
 function fmtDate(ts){ if(!ts) return "—"; const d=new Date(ts);
@@ -65,14 +98,19 @@ function renderCharts(rows){
 function renderTable(rows){
   const tb = $("tbl").querySelector("tbody");
   tb.innerHTML = rows.map(r=>`<tr data-id="${r.id}">
-    <td>${r.thumb?`<img src="${r.thumb}" width="48" style="border-radius:4px">`:"—"}</td>
-    <td>${esc(r.name)}</td><td>${fmtDate(r.ts)}</td><td>${esc(r.engine)}</td><td>${esc(r.marker)}</td>
+    <td><input type="checkbox" class="rowsel" data-id="${r.id}" ${selected.has(r.id)?"checked":""}></td>
+    <td>${r.thumb?`<img src="${r.thumb}" width="44" style="border-radius:4px">`:(r.geom?`<span class="minisketch" data-id="${r.id}"></span>`:"—")}</td>
+    <td>${esc(r.name)}</td><td>${fmtDate(r.ts)}</td><td>${esc(r.engine)}</td>
+    <td>${r.group?`<span class="grouptag">${esc(r.group)}</span>`:"—"}</td>
     <td>${r.lengthVal.toFixed?r.lengthVal.toFixed(2):r.lengthVal} ${r.lengthUnit}${r.colorCorrected?" ✓":""}</td>
     <td>${r.tips}</td><td>${r.branches}</td><td>${r.angle}</td>
     <td><button class="ghost del" data-id="${r.id}" title="delete" style="padding:2px 8px">✕</button></td>
   </tr>`).join("");
-  tb.querySelectorAll(".del").forEach(b=>b.onclick=async e=>{ e.stopPropagation(); await AR_DB.remove(b.dataset.id); load(); });
-  tb.querySelectorAll("tr").forEach(tr=>tr.onclick=()=>showDetail(RECORDS.find(r=>r.id===tr.dataset.id)));
+  tb.querySelectorAll(".del").forEach(b=>b.onclick=async e=>{ e.stopPropagation(); selected.delete(b.dataset.id); await AR_DB.remove(b.dataset.id); load(); });
+  tb.querySelectorAll(".rowsel").forEach(c=>c.onclick=e=>{ e.stopPropagation();
+    if(c.checked) selected.add(c.dataset.id); else selected.delete(c.dataset.id); updateSelUI(); });
+  tb.querySelectorAll("tr").forEach(tr=>tr.onclick=e=>{ if(e.target.classList.contains("rowsel")) return; showDetail(RECORDS.find(r=>r.id===tr.dataset.id)); });
+  tb.querySelectorAll(".minisketch").forEach(s=>{ const r=RECORDS.find(x=>x.id===s.dataset.id); if(r&&r.geom) s.innerHTML=rootSVG(r.geom, 40, 40, 1); });
 }
 
 /* ---------- per-record detail (archiDART trait set + H0 barcode) ---------- */
@@ -85,10 +123,24 @@ const ARCH_LABELS = {
   tortuosity:"Tortuosity", magnitude:"Magnitude (# tips)", altitude:"Altitude",
   extPathLength:"Ext. path length", maxPersistence:"Max persistence", totalPersistence:"Total persistence"
 };
+function rootSVG(geom, W, H, sw){
+  const pts=[].concat(...geom.map(g=>g.p)); if(!pts.length) return "";
+  const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const pad=4, span=Math.max(x1-x0,y1-y0,1), s=(Math.min(W,H)-2*pad)/span;
+  const cx=(x)=>pad+(x-x0)*s+(W-2*pad-(x1-x0)*s)/2, cy=(y)=>pad+(y-y0)*s;
+  const col=o=>o===1?"var(--accent)":o===2?"var(--accent2)":"#b07fd0";
+  const paths=geom.map(g=>`<polyline points="${g.p.map(p=>cx(p[0]).toFixed(1)+","+cy(p[1]).toFixed(1)).join(" ")}" fill="none" stroke="${col(g.o)}" stroke-width="${g.o===1?sw*1.6:sw}" stroke-linecap="round" stroke-linejoin="round"/>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${paths}</svg>`;
+}
 function showDetail(rec){
   if(!rec) return;
   $("detail").style.display="block";
-  $("detailName").textContent = `${rec.name} — ${rec.engine}`;
+  $("detailName").textContent = `${rec.name} — ${rec.engine}` + (rec.group?` · ${rec.group}`:"");
+  // image of the selected root: the analysis thumbnail, or a drawing from the RSML geometry
+  if(rec.thumb) $("detailImage").innerHTML = `<img src="${rec.thumb}" style="max-width:220px;border-radius:8px"><div class="tlbl">saved image</div>`;
+  else if(rec.geom) $("detailImage").innerHTML = rootSVG(rec.geom, 200, 260, 2) + `<div class="tlbl">root system (colour = branching order)</div>`;
+  else $("detailImage").innerHTML = `<div class="tlbl">no image</div>`;
   const a = rec.arch;
   if(!a){ $("detailTraits").innerHTML = `<p class="method">This record has basic traits only (length ${rec.lengthVal} ${rec.lengthUnit}, tips ${rec.tips}, branches ${rec.branches}, angle ${rec.angle}°). Import RSML for the full archiDART trait set.</p>`; $("detailBarcode").innerHTML=""; $("detail").scrollIntoView({behavior:"smooth",block:"nearest"}); return; }
   const u = rec.lengthUnit;
@@ -111,6 +163,24 @@ function showDetail(rec){
   $("detail").scrollIntoView({behavior:"smooth",block:"nearest"});
 }
 $("detailClose").onclick = ()=>$("detail").style.display="none";
+
+/* ---------- selection & groups ---------- */
+$("selAll").onclick = e=>{ const on=e.target.checked;
+  view().forEach(r=>{ if(on) selected.add(r.id); else selected.delete(r.id); });
+  document.querySelectorAll(".rowsel").forEach(c=>c.checked=on); updateSelUI(); };
+$("groupFilter").onchange = e=>{ groupSel=e.target.value; render(); };
+$("makeGroup").onclick = async ()=>{
+  if(!selected.size) return;
+  const name = prompt(`Name the group for ${selected.size} selected record(s):`, "");
+  if(name==null || !name.trim()) return;
+  for(const r of RECORDS){ if(selected.has(r.id)){ r.group=name.trim(); await AR_DB.save(r); } }
+  selected.clear(); load();
+};
+$("ungroup").onclick = async ()=>{
+  if(!selected.size) return;
+  for(const r of RECORDS){ if(selected.has(r.id)){ delete r.group; await AR_DB.save(r); } }
+  selected.clear(); load();
+};
 function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 /* sorting */
@@ -137,7 +207,7 @@ $("loadSamples").onclick = async ()=>{
       const obj = await (await fetch("samples/18_way_skew.json")).json();
       const n = await AR_DB.saveMany(obj.records);
       alert(`Loaded ${n} records (18-way skew, RootNav RSML).`);
-    } else {
+    } else if($("sampleSet").value === "stereotypes"){
       const recs=[];
       for(const nm of STEREOTYPES){
         const rec = AR_RSML.parse(await (await fetch(`samples/stereotypes/${nm}.rsml`)).text(), nm+".rsml");
@@ -145,6 +215,16 @@ $("loadSamples").onclick = async ()=>{
       }
       await AR_DB.saveMany(recs);
       alert(`Loaded ${recs.length} extreme-stereotype architectures (archidart-style traits).`);
+    } else {
+      const idx = await (await fetch("samples/tictoc/index.json")).json();
+      const recs=[];
+      for(const f of idx.files){
+        const rec = AR_RSML.parse(await (await fetch(`samples/tictoc/${encodeURIComponent(f.file)}`)).text(), f.file);
+        if(rec){ rec.id="sample_tictoc_"+f.file.replace(/\W+/g,"_"); rec.group=f.group;
+          rec.name=`${f.genotype} ${f.well} d${f.day}`; recs.push(rec); }
+      }
+      await AR_DB.saveMany(recs);
+      alert(`Loaded ${recs.length} TICTOC cotton records, pre-grouped Flight vs Ground.`);
     }
     load();
   }catch(e){ alert("Could not load sample data: "+e.message); }

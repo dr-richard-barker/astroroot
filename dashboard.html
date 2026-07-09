@@ -18,6 +18,7 @@
     <select id="sampleSet" title="Bundled demo datasets">
       <option value="skew">18-way skew (53 RootNav plates)</option>
       <option value="stereotypes">Extreme stereotypes (5, archidart-style)</option>
+      <option value="tictoc">TICTOC cotton — Flight vs Ground (24)</option>
     </select>
     <button id="loadSamples" class="ghost" title="Load the selected demo dataset">🌱 Load</button>
     <label class="ghost btnlink" style="border:1px solid var(--edge);padding:8px 14px;border-radius:8px;cursor:pointer" title="Import RootNav .rsml files">
@@ -65,11 +66,22 @@
       <div class="chartbox"><h3>Root length distribution</h3><div id="chartLen"></div></div>
       <div class="chartbox"><h3>Angle from vertical (skew)</h3><div id="chartAngle"></div></div>
     </div>
+    <div id="groupSummary"></div>
+
+    <div class="btnrow" id="groupBar" style="margin:6px 0">
+      <label class="mini"><input type="checkbox" id="selAll"> select all (filtered)</label>
+      <span id="selCount" class="hint">0 selected</span>
+      <button id="makeGroup" class="ghost" disabled>Group selected…</button>
+      <button id="ungroup" class="ghost" disabled>Ungroup</button>
+      <span style="flex:1"></span>
+      <label class="mini">show group <select id="groupFilter"><option value="">all</option></select></label>
+    </div>
+
     <table class="datatable" id="tbl">
       <thead><tr>
-        <th></th>
+        <th></th><th></th>
         <th data-sort="name">Name</th><th data-sort="ts">Date</th><th data-sort="engine">Engine</th>
-        <th data-sort="marker">Marker</th><th data-sort="lengthVal">Length</th>
+        <th data-sort="group">Group</th><th data-sort="lengthVal">Length</th>
         <th data-sort="tips">Tips</th><th data-sort="branches">Br.</th><th data-sort="angle">Angle°</th><th></th>
       </tr></thead>
       <tbody></tbody>
@@ -80,8 +92,13 @@
         <h3 id="detailName" style="margin:0"></h3>
         <button id="detailClose" class="ghost" style="padding:2px 10px">✕</button>
       </div>
-      <div id="detailTraits" class="traitgrid"></div>
-      <div id="detailBarcode"></div>
+      <div class="detailmain">
+        <div id="detailImage" class="detailimg"></div>
+        <div style="flex:1;min-width:220px">
+          <div id="detailTraits" class="traitgrid"></div>
+          <div id="detailBarcode"></div>
+        </div>
+      </div>
     </div>
   </section>
 </main>

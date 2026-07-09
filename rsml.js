@@ -84,6 +84,9 @@ const AR_RSML = (() => {
     const Vtot = withD.length ? sum(withD.map(r=>Math.PI*(r.diam/2)**2*r.len)) : null;
     const tort = mean(roots.map(r=>{ const s=dist(r.pts[0],r.pts[r.pts.length-1]); return s>1e-6?r.len/s:1; }));
     const barcode = roots.map(r=>({birth:+r.geoTip.toFixed(2), death:+r.geoBase.toFixed(2)}));
+    // compact geometry for drawing the root system (downsample each root to <=18 points)
+    const ds = p => { if(p.length<=18) return p; const out=[],st=(p.length-1)/17; for(let i=0;i<18;i++) out.push(p[Math.round(i*st)]); return out; };
+    const geom = roots.map(r=>({o:r.order, p:ds(r.pts).map(pt=>[+pt[0].toFixed(1),+pt[1].toFixed(1)])}));
     const persist = barcode.map(b=>b.birth-b.death);
     const lm=meta("last-modified"); let ts=Date.parse(lm); if(isNaN(ts)) ts=Date.now();
     // resolution = pixels per <unit>. Physical units convert as unit_in_cm / resolution;
@@ -111,7 +114,7 @@ const AR_RSML = (() => {
       engine:"RootNav/RSML (archidart traits)", marker:`rsml (${unit})`,
       pxPerCm:null, lengthVal:arch.TRL, lengthUnit:dispUnit, colorCorrected:false,
       tips:arch.magnitude, branches:arch.TNLR, angle:+mean(o1.map(r=>angleFromVertical(r.pts))).toFixed(1),
-      arch, thumb:null
+      arch, geom, thumb:null
     };
   }
   return { parse, convexHullArea };

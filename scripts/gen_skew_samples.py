@@ -43,7 +43,11 @@ for f in files:
     ts = to_ts(lm.group(1).strip()) if lm else 1511772000000
     # each <plant> ... </plant> holds one primary root polyline
     plants = re.findall(r'<plant\b.*?</plant>', txt, re.S)
-    lens, angs, nroots, nlat = [], [], 0, 0
+    lens, angs, nroots, nlat, geom = [], [], 0, 0, []
+    def ds(p):
+        if len(p) <= 18: return p
+        step = (len(p)-1)/17.0
+        return [p[round(i*step)] for i in range(18)]
     for p in plants:
         polys = re.findall(r'<polyline>(.*?)</polyline>', p, re.S)
         if not polys: continue
@@ -51,6 +55,7 @@ for f in files:
         if len(pts) < 2: continue
         lens.append(poly_len(pts)); angs.append(angle_from_vertical(pts)); nroots += 1
         nlat += max(0, len(polys)-1)           # extra polylines = laterals
+        geom.append({"o":1, "p":[[round(x,1),round(y,1)] for x,y in ds(pts)]})
     if not lens: continue
     records.append({
         "id": "sample_" + re.sub(r'[^A-Za-z0-9]+','_', f["name"].replace(".rsml","")),
@@ -58,7 +63,7 @@ for f in files:
         "engine": "RootNav (RSML import)", "marker": "rsml (pixel)",
         "pxPerCm": None, "lengthVal": round(sum(lens)/len(lens), 1), "lengthUnit": "px",
         "colorCorrected": False, "tips": nroots, "branches": nlat,
-        "angle": round(sum(angs)/len(angs), 1), "thumb": None,
+        "angle": round(sum(angs)/len(angs), 1), "thumb": None, "geom": geom,
     })
 
 records.sort(key=lambda r: r["name"])

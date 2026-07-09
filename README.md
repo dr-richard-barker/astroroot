@@ -23,7 +23,8 @@ into one page that works on a school Chromebook. Part of the
 | **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
 | **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
 | **archiDART-comparable RSA traits** from RSML — TRL, per-order lengths, hull, surface/volume, tortuosity, Fitter topology, H0 barcode | ✅ [`docs/ARCHIDART_PARITY.md`](docs/ARCHIDART_PARITY.md) |
-| **Dashboard** — stats, charts, searchable table, per-record detail + barcode, CSV/JSON export | ✅ `dashboard.html` |
+| **Dashboard** — stats, charts, searchable table, per-record detail (root drawing + barcode), CSV/JSON export | ✅ `dashboard.html` |
+| **Groups** — multi-select records → named groups + per-group summary + filter | ✅ Flight-vs-Ground / genotype comparisons |
 | **Cloud sync** — pool measurements to Supabase (metadata only, RLS) | ✅ opt-in; keys stay in your browser |
 | **CSV / RSML / PNG export** | ✅ |
 | **Train-your-own** (label → export dataset → cloud-train → re-import) | ✅ label + dataset export; training runs in the cloud |
@@ -75,6 +76,7 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `rsml.js` | RSML parser + archiDART-comparable trait engine (nested roots, diameter, topology) |
 | `samples/18_way_skew.json` | bundled sample dataset (53 RootNav skew plates) |
 | `samples/stereotypes/*.rsml` | 5 extreme-stereotype architectures (archidart-style demo) |
+| `samples/tictoc/*.rsml` | 24 TICTOC cotton root systems (Flight vs Ground, day 6) |
 | `docs/ARCHIDART_PARITY.md` | honest map of archiDART trait coverage |
 | `supabase/schema.sql` | table + Row Level Security to run in your Supabase project |
 | `dashboard.html` / `dashboard.js` | saved-results dashboard — stats, charts, table, export |

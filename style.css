@@ -71,3 +71,9 @@ optgroup{color:var(--muted)}
 .trait{background:var(--bg);border:1px solid var(--edge);border-radius:8px;padding:8px 10px}
 .tval{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
 .tlbl{font-size:11px;color:var(--muted);margin-top:2px}
+.detailmain{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+.detailimg{background:var(--bg);border:1px solid var(--edge);border-radius:8px;padding:8px;text-align:center}
+.detailimg svg{max-width:100%;height:auto}
+.grouptag{background:var(--accent2);color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap}
+.minisketch svg{vertical-align:middle}
+#tbl th:first-child,#tbl td:first-child{width:24px;text-align:center}
