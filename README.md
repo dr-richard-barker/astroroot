@@ -18,6 +18,7 @@ into one page that works on a school Chromebook. Part of the
 | Feature | Status |
 |---|---|
 | **Single image** → traced overlay + measurements | ✅ |
+| **Demo/test images** — NASA ABRS root timelapse, no upload needed | ✅ Single picker + Batch "load demo set" |
 | **Batch** (many images → one CSV) | ✅ |
 | **Classical baseline** (Otsu threshold + Zhang–Suen thinning) | ✅ works with no model |
 | **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
@@ -77,6 +78,7 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `samples/18_way_skew.json` | bundled sample dataset (53 RootNav skew plates) |
 | `samples/stereotypes/*.rsml` | 5 extreme-stereotype architectures (archidart-style demo) |
 | `samples/tictoc/*.rsml` | 24 TICTOC cotton root systems (Flight vs Ground, day 6) |
+| `samples/images/*.jpg` | 8 NASA ABRS timelapse demo/test images (web-optimized) |
 | `docs/ARCHIDART_PARITY.md` | honest map of archiDART trait coverage |
 | `supabase/schema.sql` | table + Row Level Security to run in your Supabase project |
 | `dashboard.html` / `dashboard.js` | saved-results dashboard — stats, charts, table, export |

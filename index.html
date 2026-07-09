@@ -39,6 +39,10 @@
       <div class="ctl">
         <label>2 · Photo</label>
         <input type="file" id="imgFile" accept="image/*" />
+        <div class="row tight">
+          <select id="demoImg" title="NASA ABRS root timelapse demo images"><option value="">— or a demo image —</option></select>
+          <button id="loadDemo" class="ghost" disabled>Load</button>
+        </div>
       </div>
       <div class="ctl">
         <label>3 · Marker / scale</label>
@@ -114,6 +118,7 @@
       <div class="ctl">
         <label>Images</label>
         <input type="file" id="batchFiles" accept="image/*" multiple />
+        <button id="loadDemoBatch" class="ghost" title="Load the 8 ABRS timelapse demo images">Load demo set (8)</button>
       </div>
       <div class="ctl">
         <label>Run</label>

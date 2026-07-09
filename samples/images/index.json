@@ -1,0 +1,86 @@
+{
+  "source": "dr-richard-barker/image-analysis-software-and-R-codes/ABRS_NASA_Roots_TimeLapse/FL_GC_Combined (ABRS ISS flight+ground root timelapse, 2010)",
+  "note": "web-optimized (<=1280px) copies for demo/test; originals ~3 MB each in the source repo",
+  "files": [
+    {
+      "file": "2010_1st.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 1/8",
+      "frame": 1,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 107480
+    },
+    {
+      "file": "2010_2nd.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 2/8",
+      "frame": 2,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 109497
+    },
+    {
+      "file": "2010_3rd.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 3/8",
+      "frame": 3,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 112174
+    },
+    {
+      "file": "2010_4th.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 4/8",
+      "frame": 4,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 116145
+    },
+    {
+      "file": "2010_5th.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 5/8",
+      "frame": 5,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 120050
+    },
+    {
+      "file": "2010_6th.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 6/8",
+      "frame": 6,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 123417
+    },
+    {
+      "file": "2010_7th.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 7/8",
+      "frame": 7,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 131916
+    },
+    {
+      "file": "2010_8th.jpg",
+      "label": "ABRS FL+GC timelapse \u2014 frame 8/8",
+      "frame": 8,
+      "orig_px": [
+        3000,
+        1448
+      ],
+      "bytes": 143470
+    }
+  ]
+}

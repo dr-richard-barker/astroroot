@@ -27,3 +27,10 @@ Other RootNav 2.0 models exported for AstroRoot remain subject to their own upst
 verify before redistributing any .onnx model.
 
 ONNX Runtime Web (Microsoft, MIT) is loaded at runtime to execute models in the browser.
+
+The demo/test images in `samples/images/` are web-optimized copies of the NASA ABRS
+(Advanced Biological Research System) ISS root time-lapse (flight + ground control, 2010),
+from https://github.com/dr-richard-barker/image-analysis-software-and-R-codes
+(ABRS_NASA_Roots_TimeLapse). See Paul, Amalfitano & Ferl (2012) BMC Plant Biology 12:232.
+Sample RSML in `samples/tictoc/` are from the TICTOC cotton study
+(https://github.com/dr-richard-barker/TICTOC).

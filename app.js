@@ -24,6 +24,38 @@ let ortSession = null, ortModelName = null, ortBackend = null;
 
 $("imgFile").onchange = e => loadImage(e.target.files[0]);
 
+/* demo/test images — NASA ABRS root timelapse (flight + ground) */
+(async function initDemoImages(){
+  try{
+    const idx = await (await fetch("samples/images/index.json")).json();
+    const sel = $("demoImg");
+    idx.files.forEach(f => sel.add(new Option(f.label, f.file)));
+    sel.onchange = () => $("loadDemo").disabled = !sel.value;
+  }catch(e){ /* offline or not served — leave the picker empty */ }
+})();
+async function fetchAsFile(path){
+  const blob = await (await fetch(path)).blob();
+  return new File([blob], path.split("/").pop(), {type: blob.type || "image/jpeg"});
+}
+$("loadDemo").onclick = async () => {
+  const f = $("demoImg").value; if(!f) return;
+  $("loadDemo").textContent = "loading…";
+  try{ loadImage(await fetchAsFile(`samples/images/${encodeURIComponent(f)}`)); }
+  catch(e){ alert("Could not load demo image: " + e.message); }
+  $("loadDemo").textContent = "Load";
+};
+$("loadDemoBatch").onclick = async () => {
+  $("loadDemoBatch").disabled = true; $("loadDemoBatch").textContent = "loading…";
+  try{
+    const idx = await (await fetch("samples/images/index.json")).json();
+    const dt = new DataTransfer();
+    for(const f of idx.files) dt.items.add(await fetchAsFile(`samples/images/${encodeURIComponent(f.file)}`));
+    $("batchFiles").files = dt.files; $("batchRun").disabled = false;
+    $("loadDemoBatch").textContent = `✓ ${idx.files.length} loaded — press Process all`;
+  }catch(e){ alert("Could not load demo set: " + e.message); $("loadDemoBatch").textContent = "Load demo set (8)"; }
+  setTimeout(()=>{ $("loadDemoBatch").textContent = "Load demo set (8)"; $("loadDemoBatch").disabled = false; }, 4000);
+};
+
 function loadImage(file){
   if(!file) return;
   const im = new Image();
