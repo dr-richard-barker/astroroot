@@ -61,3 +61,7 @@ optgroup{color:var(--muted)}
 .chartbox h3{margin:0 0 8px;font-size:14px}
 .datatable img{display:block}
 .datatable tbody tr:hover{background:var(--panel)}
+.cloudbox{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:12px 14px;margin-bottom:16px}
+.cloudbox summary{cursor:pointer;font-weight:600}
+.cloudform{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0}
+.cloudform .mini{flex-direction:column;align-items:flex-start;gap:3px}

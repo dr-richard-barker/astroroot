@@ -23,6 +23,7 @@ into one page that works on a school Chromebook. Part of the
 | **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
 | **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
 | **Dashboard** — stats, charts, searchable table, CSV/JSON export | ✅ `dashboard.html` |
+| **Cloud sync** — pool measurements to Supabase (metadata only, RLS) | ✅ opt-in; keys stay in your browser |
 | **CSV / RSML / PNG export** | ✅ |
 | **Train-your-own** (label → export dataset → cloud-train → re-import) | ✅ label + dataset export; training runs in the cloud |
 | **Arabidopsis RootNav 2.0 model** (ONNX, in-browser) | ✅ **ships in `models/`** — WebGPU (~1 s), WASM fallback |
@@ -69,6 +70,8 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `index.html` | UI — Single / Batch / Train / About tabs + marker & save controls |
 | `app.js` | all logic — marker detect, segmentation, thinning, measurement, exports, labelling, zip |
 | `db.js` | IndexedDB wrapper (shared by app + dashboard) |
+| `cloud.js` | Supabase REST sync — metadata only, keys via localStorage |
+| `supabase/schema.sql` | table + Row Level Security to run in your Supabase project |
 | `dashboard.html` / `dashboard.js` | saved-results dashboard — stats, charts, table, export |
 | `style.css` | light/dark theming |
 | `docs/DATA_AND_DASHBOARD.md` | marker types (PlantCV parity), database & dashboard, cloud option |

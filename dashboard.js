@@ -92,4 +92,39 @@ $("impJson").onchange = async e=>{ const f=e.target.files[0]; if(!f) return; con
 $("clearDb").onclick = async ()=>{ if(confirm("Delete ALL saved measurements from this device?")){ await AR_DB.clear(); load(); } };
 function dl(name,data,type){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; a.click(); }
 
+/* ---------- cloud sync (Supabase, metadata only) ---------- */
+function cloudState(){
+  const ok = AR_CLOUD.configured();
+  $("cloudState").textContent = ok ? "configured ✓" : "not configured";
+}
+function initCloud(){
+  const c = AR_CLOUD.config();
+  if(c.url) $("sbUrl").value = c.url;
+  if(c.table) $("sbTable").value = c.table;   // key intentionally not pre-filled into the field
+  cloudState();
+  const status = m => $("sbStatus").textContent = m;
+  $("sbSave").onclick = () => {
+    const key = $("sbKey").value || AR_CLOUD.config().key || "";   // keep existing key if field left blank
+    if(!$("sbUrl").value || !key){ status("need URL + anon key"); return; }
+    AR_CLOUD.setConfig($("sbUrl").value, key, $("sbTable").value || "measurements");
+    $("sbKey").value = ""; cloudState(); status("settings saved to this browser");
+  };
+  $("sbTest").onclick = async () => { status("testing…");
+    try{ await AR_CLOUD.test(); status("✓ connected"); }catch(e){ status("✗ "+e.message.slice(0,80)); } };
+  $("sbPush").onclick = async () => {
+    if(!AR_CLOUD.configured()){ status("save settings first"); return; }
+    status("syncing…");
+    try{ const n = await AR_CLOUD.push(RECORDS); status(`✓ synced ${n} records (metadata only)`); }
+    catch(e){ status("✗ "+e.message.slice(0,90)); }
+  };
+  $("sbPull").onclick = async () => {
+    if(!AR_CLOUD.configured()){ status("save settings first"); return; }
+    status("pulling…");
+    try{ const recs = await AR_CLOUD.pull(); await AR_DB.saveMany(recs); status(`✓ pulled ${recs.length} records`); load(); }
+    catch(e){ status("✗ "+e.message.slice(0,90)); }
+  };
+  $("sbForget").onclick = () => { AR_CLOUD.clearConfig(); $("sbUrl").value=""; $("sbKey").value=""; cloudState(); status("keys removed from this browser"); };
+}
+
+initCloud();
 load();

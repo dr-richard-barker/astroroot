@@ -24,6 +24,28 @@
     <button id="clearDb" class="ghost" style="color:#f85149">Clear all</button>
   </div>
 
+  <details id="cloudPanel" class="cloudbox">
+    <summary>☁️ Cloud sync (Supabase) — <span id="cloudState" class="hint">not configured</span></summary>
+    <p class="method">Syncs <b>metadata only</b> — measurements never include your images/thumbnails.
+      Paste your Supabase <b>Project URL</b> and <b>anon (publishable) key</b> — stored only in this
+      browser. Never paste the <code>service_role</code> secret. Requires the table + Row Level
+      Security from <a href="supabase/schema.sql">supabase/schema.sql</a>
+      (<a href="docs/DATA_AND_DASHBOARD.md">setup guide</a>).</p>
+    <div class="cloudform">
+      <label class="mini">Project URL <input id="sbUrl" placeholder="https://xxxx.supabase.co" style="width:230px"></label>
+      <label class="mini">anon key <input id="sbKey" type="password" placeholder="eyJhbGci…" style="width:230px"></label>
+      <label class="mini">table <input id="sbTable" value="measurements" style="width:130px"></label>
+    </div>
+    <div class="btnrow">
+      <button id="sbSave" class="ghost">Save settings</button>
+      <button id="sbTest" class="ghost">Test connection</button>
+      <button id="sbPush" class="primary">⬆ Sync up (metadata)</button>
+      <button id="sbPull" class="ghost">⬇ Pull to local</button>
+      <button id="sbForget" class="ghost" style="color:#f85149">Forget keys</button>
+      <span id="sbStatus" class="hint"></span>
+    </div>
+  </details>
+
   <section id="empty" class="panel" style="display:none">
     <p class="method">No saved measurements yet. Analyse an image in the
       <a href="index.html">tool</a> and click <b>Save to database</b>.</p>
@@ -50,6 +72,7 @@
 <footer><span>AstroRoot Dashboard · data stored locally in your browser (IndexedDB)</span></footer>
 
 <script src="db.js"></script>
+<script src="cloud.js"></script>
 <script src="dashboard.js"></script>
 </body>
 </html>

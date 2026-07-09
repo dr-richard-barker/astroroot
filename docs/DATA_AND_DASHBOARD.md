@@ -41,16 +41,38 @@ engine + marker used, the calibration, and a thumbnail. **Nothing leaves your de
 - **Export**: CSV (for a spreadsheet/stats) or JSON (a full backup you can re-import on another
   machine). **Import** merges a JSON backup back in.
 
-## "Our database" — the cloud option (a decision, not yet built)
+## Cloud sync — Supabase (metadata only)
 
-AstroRoot is **local-first** by design: it matches the tool's promise that *student images stay
-on the device*, and it needs no accounts or backend. A **shared/cloud database** (e.g. a class
-or CoSE-wide store on cosecloud.com) is the natural next step but is a **separate decision**
-because it means:
+AstroRoot stays **local-first** (images never leave the device), but you can sync the
+**measurements** (metadata only — no images or thumbnails) to a shared **Supabase** table so a
+class or lab can pool results. It's on the **Dashboard → ☁️ Cloud sync** panel.
 
-- standing up a backend (auth + storage API), and
-- student measurements/thumbnails leaving the device — which needs a consent/privacy call.
+### One-time setup
 
-The JSON export/import already makes the data portable, so a cloud sync can be layered on top
-without changing how analysis works. **Tell us which backend** (Supabase, a CoSE API, Google
-Sheets, …) and whether images may leave the device, and it can be wired in.
+1. Create a free project at [supabase.com](https://supabase.com) (you do this — it needs an
+   account; AstroRoot never creates accounts or handles your password).
+2. In the project's **SQL Editor**, run [`supabase/schema.sql`](../supabase/schema.sql). It
+   creates the `measurements` table, **enables Row Level Security**, and adds a policy. Pick
+   *Option A* (open anon read/write — fine for a trusted classroom) or *Option B* (per-user,
+   once you add sign-in).
+3. In **Project Settings → API**, copy the **Project URL** and the **`anon` `public` key**.
+   > ⚠️ Use the **anon (publishable)** key only. **Never** paste the `service_role` secret into
+   > a browser app — it bypasses RLS. The anon key is safe to use client-side *because* RLS is on.
+4. On the Dashboard, open **☁️ Cloud sync**, paste the URL + anon key + table name, **Save
+   settings** (stored only in your browser's localStorage — never committed anywhere), then
+   **Test connection**.
+
+### Using it
+
+- **⬆ Sync up** pushes your local records to Supabase (upsert by `id`, so re-syncing is safe and
+  won't duplicate). **Thumbnails are stripped before upload** — only the 12 metadata fields go.
+- **⬇ Pull to local** fetches the shared table into your local database so the dashboard shows
+  everyone's rows.
+- **Forget keys** removes the credentials from this browser.
+
+### What crosses the wire
+
+Exactly these columns: `id, ts, name, engine, marker, px_per_cm, length_val, length_unit,
+color_corrected, tips, branches, angle`. **No image, no thumbnail, no pixel data.** If later you
+want per-student ownership, switch the schema to *Option B* and add Supabase Auth — the sync code
+already sends the anon/authenticated key, so only the policy changes.
