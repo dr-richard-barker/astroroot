@@ -29,10 +29,12 @@ function fmtDate(ts){ if(!ts) return "—"; const d=new Date(ts);
 const mean = a => a.length ? a.reduce((s,v)=>s+v,0)/a.length : 0;
 
 function renderStats(rows){
-  const cm = rows.filter(r=>r.lengthUnit==="cm").map(r=>r.lengthVal);
+  const units = [...new Set(rows.map(r=>r.lengthUnit))];
+  const lens = rows.map(r=>r.lengthVal).filter(v=>typeof v==="number");
+  const lenLabel = lens.length ? (units.length===1 ? `${mean(lens).toFixed(units[0]==="cm"?2:0)} ${units[0]}` : "mixed units") : "—";
   const cards = [
     ["Records", rows.length],
-    ["Mean length", cm.length?`${mean(cm).toFixed(2)} cm`:"—"],
+    ["Mean length", lenLabel],
     ["Mean tips", rows.length?mean(rows.map(r=>r.tips)).toFixed(1):"—"],
     ["Mean branches", rows.length?mean(rows.map(r=>r.branches)).toFixed(1):"—"],
     ["Mean angle", rows.length?`${mean(rows.map(r=>r.angle)).toFixed(1)}°`:"—"],
@@ -41,27 +43,23 @@ function renderStats(rows){
 }
 
 function svg(w,h,inner){ return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:${w}px">${inner}</svg>`; }
+function histogram(vals, unit, color){
+  if(!vals.length) return `<p class="method">No records yet.</p>`;
+  const W=340,H=170,pad=28, min=Math.min(...vals), max=Math.max(...vals), span=(max-min)||1, bins=Math.min(10, Math.max(4, Math.round(Math.sqrt(vals.length))));
+  const counts=new Array(bins).fill(0); vals.forEach(v=>{ let b=Math.floor((v-min)/span*bins); if(b>=bins)b=bins-1; if(b<0)b=0; counts[b]++; });
+  const cmax=Math.max(...counts)||1, bw=(W-2*pad)/bins;
+  let bars=""; counts.forEach((c,i)=>{ const bh=(H-2*pad)*c/cmax; bars+=`<rect x="${(pad+i*bw+1.5).toFixed(1)}" y="${(H-pad-bh).toFixed(1)}" width="${(bw-3).toFixed(1)}" height="${bh.toFixed(1)}" fill="${color}"/>`; });
+  const axis=`<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="var(--edge)"/>`+
+    `<text x="${pad}" y="${H-8}" font-size="10" fill="var(--muted)">${min.toFixed(1)}</text>`+
+    `<text x="${W-pad}" y="${H-8}" font-size="10" fill="var(--muted)" text-anchor="end">${max.toFixed(1)} ${unit}</text>`+
+    `<text x="${pad}" y="14" font-size="10" fill="var(--muted)">n=${vals.length}</text>`;
+  return svg(W,H,bars+axis);
+}
 function renderCharts(rows){
-  // length histogram (calibrated cm records only)
-  const cm = rows.filter(r=>r.lengthUnit==="cm").map(r=>r.lengthVal);
-  if(cm.length){
-    const W=340,H=170,pad=28, min=Math.min(...cm), max=Math.max(...cm)||1, bins=8;
-    const counts=new Array(bins).fill(0); cm.forEach(v=>{ let b=Math.floor((v-min)/((max-min)||1)*bins); if(b>=bins)b=bins-1; counts[b]++; });
-    const cmax=Math.max(...counts)||1, bw=(W-2*pad)/bins;
-    let bars=""; counts.forEach((c,i)=>{ const bh=(H-2*pad)*c/cmax; bars+=`<rect x="${pad+i*bw+2}" y="${H-pad-bh}" width="${bw-4}" height="${bh}" fill="var(--accent)"/>`; });
-    const axis=`<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="var(--edge)"/><text x="${pad}" y="${H-8}" font-size="10" fill="var(--muted)">${min.toFixed(1)}</text><text x="${W-pad}" y="${H-8}" font-size="10" fill="var(--muted)" text-anchor="end">${max.toFixed(1)} cm</text>`;
-    $("chartLen").innerHTML = svg(W,H,bars+axis);
-  } else $("chartLen").innerHTML = `<p class="method">No calibrated (cm) records yet.</p>`;
-  // tips vs length scatter
-  const pts = rows.filter(r=>r.lengthUnit==="cm");
-  if(pts.length){
-    const W=340,H=170,pad=30, xs=pts.map(p=>p.lengthVal), ys=pts.map(p=>p.tips);
-    const xmin=Math.min(...xs),xmax=Math.max(...xs)||1,ymax=Math.max(...ys,1);
-    const sx=v=>pad+(W-2*pad)*(v-xmin)/((xmax-xmin)||1), sy=v=>H-pad-(H-2*pad)*v/ymax;
-    let dots=pts.map(p=>`<circle cx="${sx(p.lengthVal).toFixed(1)}" cy="${sy(p.tips).toFixed(1)}" r="4" fill="var(--accent2)" opacity="0.75"/>`).join("");
-    const axis=`<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="var(--edge)"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="var(--edge)"/><text x="${W-pad}" y="${H-8}" font-size="10" fill="var(--muted)" text-anchor="end">length (cm)→</text><text x="6" y="${pad}" font-size="10" fill="var(--muted)">tips</text>`;
-    $("chartScatter").innerHTML = svg(W,H,dots+axis);
-  } else $("chartScatter").innerHTML = `<p class="method">No calibrated (cm) records yet.</p>`;
+  const units=[...new Set(rows.map(r=>r.lengthUnit))];
+  $("chartLen").innerHTML = histogram(rows.map(r=>r.lengthVal).filter(v=>typeof v==="number"),
+                                      units.length===1?units[0]:"", "var(--accent)");
+  $("chartAngle").innerHTML = histogram(rows.map(r=>r.angle).filter(v=>typeof v==="number"), "°", "var(--accent2)");
 }
 
 function renderTable(rows){
@@ -90,6 +88,20 @@ $("expCsv").onclick = ()=>{ const rows=view(); let csv="name,date,engine,marker,
 $("expJson").onclick = async ()=>dl("astroroot_backup.json", await AR_DB.exportJSON(), "application/json");
 $("impJson").onchange = async e=>{ const f=e.target.files[0]; if(!f) return; const n=await AR_DB.importJSON(await f.text()); alert(`Imported ${n} records.`); load(); };
 $("clearDb").onclick = async ()=>{ if(confirm("Delete ALL saved measurements from this device?")){ await AR_DB.clear(); load(); } };
+$("loadSamples").onclick = async ()=>{
+  try{
+    const res = await fetch("samples/18_way_skew.json"); const obj = await res.json();
+    const n = await AR_DB.saveMany(obj.records);   // stable ids -> re-loading won't duplicate
+    alert(`Loaded ${n} sample records (18-way skew, RootNav RSML).`); load();
+  }catch(e){ alert("Could not load sample data: "+e.message); }
+};
+$("impRsml").onchange = async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  let n=0, skipped=0;
+  for(const f of files){ const rec = AR_RSML.parse(await f.text(), f.name);
+    if(rec){ await AR_DB.save(rec); n++; } else skipped++; }
+  alert(`Imported ${n} RSML file(s)` + (skipped?`, skipped ${skipped} (no roots found)`:"") + "."); load();
+};
 function dl(name,data,type){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; a.click(); }
 
 /* ---------- cloud sync (Supabase, metadata only) ---------- */

@@ -15,6 +15,10 @@
 <main>
   <div class="btnrow" style="margin-bottom:14px">
     <input type="search" id="search" placeholder="filter by name / engine / marker…" style="min-width:220px" />
+    <button id="loadSamples" class="ghost" title="Load the 18-way skew RootNav dataset">🌱 Load sample data</button>
+    <label class="ghost btnlink" style="border:1px solid var(--edge);padding:8px 14px;border-radius:8px;cursor:pointer" title="Import RootNav .rsml files">
+      Import RSML <input type="file" id="impRsml" accept=".rsml" multiple hidden />
+    </label>
     <span style="flex:1"></span>
     <button id="expCsv" class="ghost">Export CSV</button>
     <button id="expJson" class="ghost">Export JSON (backup)</button>
@@ -55,7 +59,7 @@
     <div id="stats" class="statgrid"></div>
     <div class="chartrow">
       <div class="chartbox"><h3>Root length distribution</h3><div id="chartLen"></div></div>
-      <div class="chartbox"><h3>Tips vs length</h3><div id="chartScatter"></div></div>
+      <div class="chartbox"><h3>Angle from vertical (skew)</h3><div id="chartAngle"></div></div>
     </div>
     <table class="datatable" id="tbl">
       <thead><tr>
@@ -73,6 +77,7 @@
 
 <script src="db.js"></script>
 <script src="cloud.js"></script>
+<script src="rsml.js"></script>
 <script src="dashboard.js"></script>
 </body>
 </html>

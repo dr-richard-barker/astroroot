@@ -71,6 +71,8 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `app.js` | all logic — marker detect, segmentation, thinning, measurement, exports, labelling, zip |
 | `db.js` | IndexedDB wrapper (shared by app + dashboard) |
 | `cloud.js` | Supabase REST sync — metadata only, keys via localStorage |
+| `rsml.js` | RootNav RSML parser → measurements (dashboard RSML import) |
+| `samples/18_way_skew.json` | bundled sample dataset (53 RootNav skew plates) |
 | `supabase/schema.sql` | table + Row Level Security to run in your Supabase project |
 | `dashboard.html` / `dashboard.js` | saved-results dashboard — stats, charts, table, export |
 | `style.css` | light/dark theming |

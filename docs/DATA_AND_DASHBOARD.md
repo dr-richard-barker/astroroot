@@ -41,6 +41,18 @@ engine + marker used, the calibration, and a thumbnail. **Nothing leaves your de
 - **Export**: CSV (for a spreadsheet/stats) or JSON (a full backup you can re-import on another
   machine). **Import** merges a JSON backup back in.
 
+### Sample data & RSML import
+
+- **🌱 Load sample data** drops in a real dataset — the **18-way skew** experiment (53 RootNav
+  RSML plates, agar/phytogel × concentration × sucrose), so the charts and table have something
+  to show immediately. Records use stable ids, so loading twice won't duplicate. (Source:
+  [`18_way_skew`](https://github.com/dr-richard-barker/image-analysis-software-and-R-codes/tree/master/18_way_skew).)
+- **Import RSML** reads any RootNav `.rsml` files (from RootNav 1 / 2.0 / RootNav-Viewer) and
+  measures them — per-plate mean primary-root length, root (tip) count, lateral (branch) count,
+  and mean tip angle from vertical (the skew) — then adds them to your database. RSML in
+  **pixel** units is stored in px (no cm scale); the charts adapt to whatever unit is present.
+  Parser: `rsml.js` (matches the sample generator).
+
 ## Cloud sync — Supabase (metadata only)
 
 AstroRoot stays **local-first** (images never leave the device), but you can sync the
