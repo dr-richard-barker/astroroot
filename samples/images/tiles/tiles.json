@@ -1,0 +1,62 @@
+[
+  {
+    "file": "tiles/tile_GC_1.jpg",
+    "label": "Single-root tile (GC) #1",
+    "kind": "tile",
+    "cond": "GC"
+  },
+  {
+    "file": "tiles/tile_GC_2.jpg",
+    "label": "Single-root tile (GC) #2",
+    "kind": "tile",
+    "cond": "GC"
+  },
+  {
+    "file": "tiles/tile_GC_3.jpg",
+    "label": "Single-root tile (GC) #3",
+    "kind": "tile",
+    "cond": "GC"
+  },
+  {
+    "file": "tiles/tile_GC_4.jpg",
+    "label": "Single-root tile (GC) #4",
+    "kind": "tile",
+    "cond": "GC"
+  },
+  {
+    "file": "tiles/tile_GC_5.jpg",
+    "label": "Single-root tile (GC) #5",
+    "kind": "tile",
+    "cond": "GC"
+  },
+  {
+    "file": "tiles/tile_FL_6.jpg",
+    "label": "Single-root tile (FL) #6",
+    "kind": "tile",
+    "cond": "FL"
+  },
+  {
+    "file": "tiles/tile_FL_7.jpg",
+    "label": "Single-root tile (FL) #7",
+    "kind": "tile",
+    "cond": "FL"
+  },
+  {
+    "file": "tiles/tile_FL_8.jpg",
+    "label": "Single-root tile (FL) #8",
+    "kind": "tile",
+    "cond": "FL"
+  },
+  {
+    "file": "tiles/tile_FL_9.jpg",
+    "label": "Single-root tile (FL) #9",
+    "kind": "tile",
+    "cond": "FL"
+  },
+  {
+    "file": "tiles/tile_FL_10.jpg",
+    "label": "Single-root tile (FL) #10",
+    "kind": "tile",
+    "cond": "FL"
+  }
+]

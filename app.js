@@ -64,7 +64,7 @@ function loadImage(file){
     const scale = Math.min(1, 760 / imgW);
     cv.width = $("overlay").width = Math.round(imgW*scale);
     cv.height = $("overlay").height = Math.round(imgH*scale);
-    cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+    drawBase();
     clearOverlay();
     $("runBtn").disabled = false;
     ["csvBtn","rsmlBtn","pngBtn"].forEach(b => $(b).disabled = true);
@@ -74,6 +74,12 @@ function loadImage(file){
   im.src = URL.createObjectURL(file);
 }
 function clearOverlay(){ octx.getContext("2d").clearRect(0,0,octx.width,octx.height); }
+function drawBase(){                                         // draw preview, grid-removed if toggled
+  if(!img) return;
+  const ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  if($("deGrid").checked){ const d=ctx.getImageData(0,0,cv.width,cv.height); removeGrid(d.data, cv.width, cv.height); ctx.putImageData(d,0,0); }
+}
+$("deGrid").onchange = () => { if(img){ $("deGrid").parentElement.style.opacity="0.5"; setTimeout(()=>{ drawBase(); $("deGrid").parentElement.style.opacity="1"; }, 20); } };
 
 /* ---------- calibration: click two marker points, enter their real distance ---------- */
 let calPts = [];
@@ -250,6 +256,7 @@ $("runBtn").onclick = async () => {
   $("runBtn").disabled = true; $("runBtn").textContent = "tracing…";
   const P = prepImage(img, imgW, imgH);                     // cap working resolution
   if(activeCorrection && $("colorCorrect").checked) applyCorrection(P.rgba, activeCorrection);  // PlantCV-style colour norm
+  if($("deGrid").checked){ $("runBtn").textContent="removing grid…"; await new Promise(r=>requestAnimationFrame(r)); removeGrid(P.rgba, P.w, P.h); $("runBtn").textContent="tracing…"; }
   let mask;
   if(ortSession){ try{ mask = await segmentOnnx(P.rgba, P.w, P.h); } catch(e){ console.warn(e); mask = segmentClassical(P.rgba, P.w, P.h); } }
   else mask = segmentClassical(P.rgba, P.w, P.h);
@@ -340,6 +347,69 @@ function removeSpecks(mask, w, h, minSize){
         if(mask[q]&&!seen[q]){seen[q]=1;stack.push(q);} } }
     if(comp.length<minSize) for(const p of comp) mask[p]=0;
   }
+}
+
+/* ===== plate-grid removal — deterministic morphological filter (developed on the ABRS data).
+ * White top-hat isolates thin bright features; directional opening keeps only the long
+ * axis-aligned ones (the etched grid); those are inpainted (H-lines filled vertically,
+ * V-lines horizontally). Not a trained model — periodic grids are better removed this way;
+ * whatever it misses, the user hand-corrects. */
+function toGrayF(rgba, n){ const g=new Float32Array(n); for(let i=0;i<n;i++) g[i]=rgba[i*4]*0.299+rgba[i*4+1]*0.587+rgba[i*4+2]*0.114; return g; }
+function extreme1D(a, w, h, r, axis, isMax){
+  let A=Float32Array.from(a), B=new Float32Array(a.length); const op=isMax?Math.max:Math.min;
+  for(let s=0;s<r;s++){
+    if(axis===1){ for(let y=0;y<h;y++){ const o=y*w; for(let x=0;x<w;x++){ const i=o+x; const l=x>0?A[i-1]:A[i], rr=x<w-1?A[i+1]:A[i]; B[i]=op(A[i],op(l,rr)); } } }
+    else       { for(let y=0;y<h;y++){ const o=y*w; for(let x=0;x<w;x++){ const i=o+x; const u=y>0?A[i-w]:A[i], d=y<h-1?A[i+w]:A[i]; B[i]=op(A[i],op(u,d)); } } }
+    const t=A; A=B; B=t;
+  }
+  return A;
+}
+const open1d=(a,w,h,r,axis)=>extreme1D(extreme1D(a,w,h,r,axis,false),w,h,r,axis,true);
+function open2d(a,w,h,r){ const e=extreme1D(extreme1D(a,w,h,r,1,false),w,h,r,0,false); return extreme1D(extreme1D(e,w,h,r,1,true),w,h,r,0,true); }
+function gridInpaint(rgba,w,h,mask,axis,iters){
+  const n=w*h;
+  for(let c=0;c<3;c++){
+    let ch=new Float32Array(n), valid=new Uint8Array(n);
+    for(let i=0;i<n;i++){ ch[i]=rgba[i*4+c]; valid[i]=mask[i]?0:1; }
+    for(let it=0;it<iters;it++){
+      const nch=Float32Array.from(ch), nv=Uint8Array.from(valid);
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){ const i=y*w+x; if(valid[i]||!mask[i]) continue;
+        let m1,m2,s1=0,s2=0;
+        if(axis===0){ m1=y>0&&valid[i-w]; m2=y<h-1&&valid[i+w]; if(m1)s1=ch[i-w]; if(m2)s2=ch[i+w]; }
+        else        { m1=x>0&&valid[i-1]; m2=x<w-1&&valid[i+1]; if(m1)s1=ch[i-1]; if(m2)s2=ch[i+1]; }
+        if(m1&&m2){ nch[i]=(s1+s2)/2; nv[i]=1; } else if(m1){ nch[i]=s1; nv[i]=1; } else if(m2){ nch[i]=s2; nv[i]=1; }
+      }
+      ch=nch; valid=nv;
+    }
+    for(let i=0;i<n;i++) rgba[i*4+c]=Math.max(0,Math.min(255,ch[i]));
+  }
+}
+function removeGrid(rgba, w, h){
+  // morphology cost scales with size; cap the working resolution at 640px (grid detection is
+  // coarse), clean there, and scale the cleaned image back — keeps it well under a second.
+  const MAXG=640, mx=Math.max(w,h);
+  if(mx>MAXG){
+    const s=MAXG/mx, dw=Math.max(1,Math.round(w*s)), dh=Math.max(1,Math.round(h*s));
+    const full=document.createElement("canvas"); full.width=w; full.height=h;
+    full.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(rgba),w,h),0,0);
+    const small=document.createElement("canvas"); small.width=dw; small.height=dh;
+    const sx=small.getContext("2d"); sx.drawImage(full,0,0,dw,dh);
+    const sd=sx.getImageData(0,0,dw,dh); removeGridCore(sd.data,dw,dh); sx.putImageData(sd,0,0);
+    const up=document.createElement("canvas"); up.width=w; up.height=h;
+    const ux=up.getContext("2d"); ux.imageSmoothingEnabled=true; ux.drawImage(small,0,0,w,h);
+    rgba.set(ux.getImageData(0,0,w,h).data); return;
+  }
+  removeGridCore(rgba,w,h);
+}
+function removeGridCore(rgba, w, h){
+  const n=w*h, g=toGrayF(rgba,n), bg=open2d(g,w,h,7);
+  const th=new Float32Array(n); for(let i=0;i<n;i++) th[i]=Math.max(0,g[i]-bg[i]);
+  const rH=open1d(th,w,h,Math.max(4,(w/14)|0),1), rV=open1d(th,w,h,Math.max(4,(h/6)|0),0);
+  const thr=r=>{ let s=0,c=0; for(const v of r) if(v>0){s+=v;c++;} const m=c?s/c:0; let sd=0; for(const v of r) if(v>0) sd+=(v-m)*(v-m); return m+(c?Math.sqrt(sd/c):0); };
+  const tH=thr(rH), tV=thr(rV); const gh=new Uint8Array(n), gv=new Uint8Array(n); let cnt=0;
+  for(let i=0;i<n;i++){ gh[i]=rH[i]>tH?1:0; gv[i]=rV[i]>tV?1:0; if(gh[i]||gv[i])cnt++; }
+  gridInpaint(rgba,w,h,gh,0,10); gridInpaint(rgba,w,h,gv,1,10);
+  return cnt/n;
 }
 
 /* ---------- ONNX segmentation (RootNav 2.0 arabidopsis_plate) ----------
@@ -518,6 +588,7 @@ $("batchSaveDb").onclick = async () => {
 function processFile(file, ppc){
   return new Promise(res => { const im=new Image(); im.onload=async()=>{
     const P=prepImage(im, im.naturalWidth, im.naturalHeight);
+    if($("deGridBatch").checked) removeGrid(P.rgba,P.w,P.h);
     let mask; if(ortSession){ try{mask=await segmentOnnx(P.rgba,P.w,P.h);}catch{ mask=segmentClassical(P.rgba,P.w,P.h);} } else mask=segmentClassical(P.rgba,P.w,P.h);
     res(measure(zhangSuen(mask,P.w,P.h), P.w, P.h, ppc, P.scale));
   }; im.src=URL.createObjectURL(file); });
