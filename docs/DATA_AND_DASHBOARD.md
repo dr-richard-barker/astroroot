@@ -80,6 +80,16 @@ regions, **each plant is tagged with the genotype whose region contains its seed
 **Save plants to database** writes one record per plant, grouped by genotype, giving proper
 **per-plant replication** (n = plants) for the dashboard comparison.
 
+### Batch across a timelapse (regions + seeds applied to every frame)
+
+Define the genotype **regions** and **seeds** once on the Single tab, then switch to **Batch**,
+load the whole folder/timelapse, and **Process all** — the same regions and seeds are applied to
+**every frame**. With seeds defined you get **one record per plant per frame** (e.g. 10 plants ×
+8 frames = 80 rows), each tagged with its genotype and carrying its **frame** name; frames are
+timestamped in order so each plant's trait **trajectory over time** is preserved. Save them and
+the dashboard compares genotypes across the whole series (and the CSV has `frame, group, plant`
+columns for your own stats). The batch note tells you exactly what will be applied before you run.
+
 ### Groups & group summaries
 
 - **Tick the checkboxes** on any rows (or *select all filtered*) and click **Group selected…** to

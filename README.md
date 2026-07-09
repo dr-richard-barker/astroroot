@@ -21,6 +21,7 @@ into one page that works on a school Chromebook. Part of the
 | **Demo/test images** — NASA ABRS root timelapse (8 full plates + 10 single-root tiles) | ✅ Single picker + Batch "load demo set" |
 | **Plate-grid removal** — deterministic morphological filter, live before/after preview | ✅ "remove plate grid" toggle (Single + Batch) |
 | **Batch** (many images → one CSV) | ✅ |
+| **Batch across a timelapse** — apply the same regions/seeds to every frame → per-plant×frame time-series | ✅ grouped by genotype, frame-stamped |
 | **Classical baseline** (Otsu threshold + Zhang–Suen thinning) | ✅ works with no model |
 | **Regions of interest** — draw + name areas (e.g. genotypes) → per-region traits | ✅ measured separately, saved tagged for group comparison |
 | **Multiple plants** — set N + mark each seed (root origin) → per-plant traits + seed→tip skew | ✅ auto-place or click; tagged by genotype region; per-plant replication |

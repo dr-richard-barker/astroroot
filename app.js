@@ -13,6 +13,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
   t.classList.add("active");
   $(t.dataset.tab).classList.add("active");
+  if(t.dataset.tab==="batch" && typeof updateBatchApply==="function") updateBatchApply();
 });
 
 /* ================= SINGLE IMAGE ================= */
@@ -556,16 +557,18 @@ octx.addEventListener("mouseup", () => { if(!roiDrag) return; const d=roiDrag; r
   if(name && name.trim()) rois.push({name:name.trim(), x0:x0/octx.width, y0:y0/octx.height, x1:x1/octx.width, y1:y1/octx.height});
   redrawOverlay(); if(lastResult) measureROIs(); });
 
-function measureROIs(){
-  if(!rois.length || !lastResult){ $("roiResults").hidden=true; $("measScope").textContent="(whole image)"; return; }
-  const {skel,pw,ph}=lastResult;
-  roiResults = rois.map(r => {
+function computeRegionResults(skel, pw, ph, scale){        // shared by Single + Batch
+  return rois.map(r => {
     const rx0=Math.max(0,Math.floor(r.x0*pw)), ry0=Math.max(0,Math.floor(r.y0*ph)),
           rx1=Math.min(pw,Math.ceil(r.x1*pw)), ry1=Math.min(ph,Math.ceil(r.y1*ph));
     const sub=new Uint8Array(pw*ph);
     for(let y=ry0;y<ry1;y++)for(let x=rx0;x<rx1;x++) if(skel[y*pw+x]) sub[y*pw+x]=1;
-    return { name:r.name, traits: measure(sub, pw, ph, pxPerCm, lastResult.scale||1) };
+    return { name:r.name, traits: measure(sub, pw, ph, pxPerCm, scale) };
   });
+}
+function measureROIs(){
+  if(!rois.length || !lastResult){ $("roiResults").hidden=true; $("measScope").textContent="(whole image)"; return; }
+  roiResults = computeRegionResults(lastResult.skel, lastResult.pw, lastResult.ph, lastResult.scale||1);
   const u = roiResults[0]?.traits.lengthUnit || "px";
   $("roiTable").innerHTML = `<thead><tr><th>Region</th><th>Length</th><th>Tips</th><th>Br.</th><th>Angle°</th></tr></thead><tbody>`+
     roiResults.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.traits.lengthVal.toFixed?x.traits.lengthVal.toFixed(2):x.traits.lengthVal} ${x.traits.lengthUnit}</td>`+
@@ -606,16 +609,14 @@ $("seedAuto").onclick = () => {
   redrawOverlay(); if(lastResult) measurePlants();
 };
 
-function measurePlants(){
-  if(!seeds.length || !lastResult){ $("plantResults").hidden=true; return; }
-  const {skel,pw,ph,scale}=lastResult;
+function computePlantResults(skel, pw, ph, scale){        // shared by Single + Batch
   const sx = seeds.map(s=>s.x*pw);
   const subs = seeds.map(()=>new Uint8Array(pw*ph));
   for(let y=0;y<ph;y++)for(let x=0;x<pw;x++){ if(!skel[y*pw+x]) continue;    // assign to nearest seed by column
     let best=0,bd=Infinity; for(let i=0;i<sx.length;i++){ const d=Math.abs(x-sx[i]); if(d<bd){bd=d;best=i;} }
     subs[best][y*pw+x]=1;
   }
-  plantResults = seeds.map((s,i)=>{
+  return seeds.map((s,i)=>{
     const t=measure(subs[i],pw,ph,pxPerCm,scale);
     let tipx=-1,tipy=-1;                                                     // lowest point = root tip
     for(let y=ph-1;y>=0 && tipy<0;y--)for(let x=0;x<pw;x++) if(subs[i][y*pw+x]){ tipx=x; tipy=y; break; }
@@ -623,6 +624,10 @@ function measurePlants(){
     const geno = (rois.find(r=> s.x>=r.x0&&s.x<=r.x1&&s.y>=r.y0&&s.y<=r.y1)||{}).name || null;
     return { plant:i+1, geno, traits:t, skew:+skew.toFixed(1) };
   });
+}
+function measurePlants(){
+  if(!seeds.length || !lastResult){ $("plantResults").hidden=true; return; }
+  plantResults = computePlantResults(lastResult.skel, lastResult.pw, lastResult.ph, lastResult.scale||1);
   const u = plantResults[0]?.traits.lengthUnit || "px";
   $("plantCount").textContent = `(${seeds.length} plant${seeds.length>1?"s":""}${rois.length?" · genotype from region":""})`;
   $("plantTable").innerHTML = `<thead><tr><th>#</th>${rois.length?"<th>Genotype</th>":""}<th>Length</th><th>Tips</th><th>Skew°</th></tr></thead><tbody>`+
@@ -679,33 +684,53 @@ function download(name, data, type){
 }
 
 /* ================= BATCH ================= */
-let batchRows = [];
-$("batchFiles").onchange = e => $("batchRun").disabled = e.target.files.length===0;
+let batchRows = [], batchRecords = [];
+function updateBatchApply(){                              // show what will be applied per frame
+  const el = $("batchApply"); if(!el) return;
+  el.textContent = seeds.length ? `Applying ${seeds.length} seeds${rois.length?` + ${rois.length} genotype regions`:""} from the Single tab → per-plant traits per frame.`
+    : rois.length ? `Applying ${rois.length} regions from the Single tab → per-region traits per frame.`
+    : "Whole-image traits per frame. Define regions/seeds on the Single tab to measure per genotype/plant.";
+}
+$("batchFiles").onchange = e => { $("batchRun").disabled = e.target.files.length===0; updateBatchApply(); };
 $("batchRun").onclick = async () => {
-  const files = [...$("batchFiles").files];
+  const files = [...$("batchFiles").files].sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
   const ppc = parseFloat($("batchScale").value) || null;
-  const tbody = $("batchTable").querySelector("tbody"); tbody.innerHTML=""; batchRows=[];
+  const tbody = $("batchTable").querySelector("tbody"); tbody.innerHTML=""; batchRows=[]; batchRecords=[];
   $("batchTable").hidden = false;
+  const eng = ortSession?`RootNav2 (${ortBackend})`:"classical", base = Date.now();
+  const mode = seeds.length ? "plant" : rois.length ? "region" : "whole";
   for(let i=0;i<files.length;i++){
     $("batchProgress").textContent = `processing ${i+1} / ${files.length}…`;
-    const t = await processFile(files[i], ppc);
-    batchRows.push({name:files[i].name, ...t});
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${files[i].name}</td><td>${t.lengthVal.toFixed(2)} ${t.lengthUnit}</td>`+
-                   `<td>${t.tips}</td><td>${t.branches}</td><td>${t.angle.toFixed(1)}</td>`;
+    const R = await processFile(files[i], ppc); const ts = base + i*1000;
+    if(mode==="plant"){
+      for(const p of computePlantResults(R.skel,R.pw,R.ph,R.scale)) batchRecords.push({ ts,
+        name:`${files[i].name} · plant ${p.plant}${p.geno?" ("+p.geno+")":""}`, engine:eng, marker:"batch",
+        pxPerCm:ppc, colorCorrected:false, lengthVal:p.traits.lengthVal, lengthUnit:p.traits.lengthUnit,
+        tips:p.traits.tips, branches:p.traits.branches, angle:p.skew, group:p.geno||"plant", frame:files[i].name, plant:p.plant, thumb:null });
+    } else if(mode==="region"){
+      for(const x of computeRegionResults(R.skel,R.pw,R.ph,R.scale)) batchRecords.push({ ts,
+        name:`${files[i].name} · ${x.name}`, engine:eng, marker:"batch", pxPerCm:ppc, colorCorrected:false,
+        lengthVal:x.traits.lengthVal, lengthUnit:x.traits.lengthUnit, tips:x.traits.tips, branches:x.traits.branches,
+        angle:+x.traits.angle.toFixed(1), group:x.name, frame:files[i].name, thumb:null });
+    } else {
+      batchRecords.push({ ts, name:files[i].name, engine:eng, marker:"batch", pxPerCm:ppc, colorCorrected:false,
+        lengthVal:R.whole.lengthVal, lengthUnit:R.whole.lengthUnit, tips:R.whole.tips, branches:R.whole.branches,
+        angle:+R.whole.angle.toFixed(1), group:null, frame:files[i].name, thumb:null });
+    }
+    batchRows.push({name:files[i].name, ...R.whole});
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${files[i].name}</td><td>${R.whole.lengthVal.toFixed(1)} ${R.whole.lengthUnit}</td><td>${R.whole.tips}</td><td>${R.whole.branches}</td><td>${R.whole.angle.toFixed(1)}</td>`;
     tbody.appendChild(tr);
   }
-  $("batchProgress").textContent = `done — ${files.length} images.`;
-  $("batchCsv").disabled = false; $("batchSaveDb").disabled = batchRows.length===0;
+  const extra = mode!=="whole" ? ` → ${batchRecords.length} per-${mode} rows` : "";
+  $("batchProgress").textContent = `done — ${files.length} frames${extra}.`;
+  $("batchCsv").disabled = false; $("batchSaveDb").disabled = batchRecords.length===0;
 };
 $("batchSaveDb").onclick = async () => {
-  const eng = ortSession?`RootNav2 (${ortBackend})`:"classical";
-  const recs = batchRows.map(r => ({ ts: Date.now(), name: r.name, engine: eng, marker: "batch",
-    pxPerCm: parseFloat($("batchScale").value)||null, colorCorrected:false,
-    lengthVal:r.lengthVal, lengthUnit:r.lengthUnit, tips:r.tips, branches:r.branches, angle:+r.angle.toFixed(1), thumb:null }));
-  await AR_DB.saveMany(recs);
+  if(!batchRecords.length) return;
+  await AR_DB.saveMany(batchRecords);
   const n = await AR_DB.count();
-  $("batchSaveDb").textContent = `✓ saved ${recs.length} (${n} in DB)`;
+  $("batchSaveDb").textContent = `✓ saved ${batchRecords.length} (${n} in DB)`;
   setTimeout(()=>$("batchSaveDb").textContent="💾 Save all to database", 2500);
 };
 function processFile(file, ppc){
@@ -713,13 +738,15 @@ function processFile(file, ppc){
     const P=prepImage(im, im.naturalWidth, im.naturalHeight);
     if($("deGridBatch").checked) removeGrid(P.rgba,P.w,P.h);
     let mask; if(ortSession){ try{mask=await segmentOnnx(P.rgba,P.w,P.h);}catch{ mask=segmentClassical(P.rgba,P.w,P.h);} } else mask=segmentClassical(P.rgba,P.w,P.h);
-    res(measure(zhangSuen(mask,P.w,P.h), P.w, P.h, ppc, P.scale));
+    const skel=zhangSuen(mask,P.w,P.h);
+    res({ whole:measure(skel,P.w,P.h,ppc,P.scale), skel, pw:P.w, ph:P.h, scale:P.scale });
   }; im.src=URL.createObjectURL(file); });
 }
 $("batchCsv").onclick = () => {
-  const u = batchRows[0]?.lengthUnit || "px";
-  let csv = `image,length_${u},tips,branches,angle_deg\n`;
-  for(const r of batchRows) csv += `${r.name},${r.lengthVal.toFixed(3)},${r.tips},${r.branches},${r.angle.toFixed(1)}\n`;
+  if(!batchRecords.length) return;
+  const u = batchRecords[0].lengthUnit || "px";
+  let csv = `frame,group,plant,name,length_${u},tips,branches,angle_deg\n`;
+  for(const r of batchRecords) csv += `${r.frame||""},${r.group||""},${r.plant||""},"${r.name}",${(+r.lengthVal).toFixed(2)},${r.tips},${r.branches},${(+r.angle).toFixed(1)}\n`;
   download("astroroot_batch.csv", csv, "text/csv");
 };
 
