@@ -91,6 +91,18 @@
           <button id="seedClear" class="ghost">Clear</button>
           <div id="seedHint" class="hint">Mark where each seed was sown (the root's starting point) → per-plant traits.</div>
         </div>
+        <div class="regionbar">
+          <button id="traceToggle" class="ghost">🖉 Manual trace</button>
+          <span id="traceTools" hidden>
+            <button id="traceDrawBtn" class="ghost">＋ Root</button>
+            <button id="traceEditBtn" class="ghost">Edit nodes</button>
+            <button id="traceFromAuto" class="ghost" title="Seed the editor from the auto-trace">From auto</button>
+            <button id="traceMeasureBtn" class="ghost">Measure</button>
+            <button id="traceRsmlBtn" class="ghost">RSML</button>
+            <button id="traceClear" class="ghost">Clear</button>
+          </span>
+          <div id="traceHint" class="hint">Hand-trace roots: click to lay nodes, drag to adjust; start on an existing root to branch a lateral.</div>
+        </div>
         <h3>Measurements <span class="hint" id="measScope">(whole image)</span></h3>
         <table id="traits">
           <tr><td>Total root length</td><td id="tLen">—</td></tr>
@@ -99,8 +111,7 @@
           <tr><td>Mean angle from vertical</td><td id="tAngle">—</td></tr>
         </table>
         <div class="editrow" hidden id="editRow">
-          <label><input type="checkbox" id="editMode" /> Correct by hand</label>
-          <span class="hint">click to add a tip · shift-click a trace to delete</span>
+          <span class="hint">Trace looks off? Use <b>🖉 Manual trace</b> (below) for full node &amp; branch control — draw, drag, insert/delete nodes, branch laterals.</span>
         </div>
         <div class="btnrow">
           <button id="saveDbBtn" class="primary" disabled>💾 Save to database</button>

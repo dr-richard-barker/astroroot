@@ -291,8 +291,12 @@ function resultRecord(name, traits){
     thumb: null };
 }
 $("saveDbBtn").onclick = async () => {
-  if(!lastResult) return;
-  const rec = resultRecord($("imgFile").files[0]?.name, lastResult.traits); rec.thumb = thumbnail();
+  const manual = editRoots.length ? traceTraits() : null;
+  const traits = manual || (lastResult && lastResult.traits);
+  if(!traits) return;
+  const rec = resultRecord($("imgFile").files[0]?.name || $("demoImg").value, traits);
+  if(manual) rec.engine = "manual trace";
+  rec.thumb = thumbnail();
   await AR_DB.save(rec);
   const n = await AR_DB.count();
   $("saveDbBtn").textContent = `✓ saved (${n} in DB)`;
@@ -538,6 +542,18 @@ function redrawOverlay(){
     c.fillStyle="#fff"; c.font="bold 9px system-ui"; c.textAlign="center"; c.textBaseline="middle";
     c.fillText(String(i+1),x,y); c.textAlign="left"; c.textBaseline="alphabetic";
   });
+  drawTrace(c);
+}
+const ORDER_COL = o => o<=1?"#f0b429":o===2?"#58a6ff":"#e668a7";     // primary / lateral / higher-order
+function drawTrace(c){
+  editRoots.forEach(r=>{
+    if(r.nodes.length<1) return;
+    const pts=r.nodes.map(n=>[n[0]*octx.width, n[1]*octx.height]);
+    if(pts.length>=2){ c.strokeStyle=ORDER_COL(r.order); c.lineWidth=(r.id===selRoot?3.5:2); c.lineJoin="round"; c.lineCap="round";
+      c.beginPath(); pts.forEach((p,i)=> i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke(); }
+    if(traceMode){ pts.forEach((p,i)=>{ c.beginPath(); c.arc(p[0],p[1], i===0?5:3.5, 0,7);
+      c.fillStyle = i===0?ORDER_COL(r.order):"#fff"; c.strokeStyle=ORDER_COL(r.order); c.lineWidth=1.5; c.fill(); c.stroke(); }); }
+  });
 }
 
 /* ---------- regions of interest (label roots by area, e.g. genotype) ---------- */
@@ -646,6 +662,141 @@ $("plantSaveDb").onclick = async () => {
   $("plantSaveDb").textContent = `✓ saved ${recs.length} plant(s) (${n} in DB)`;
   setTimeout(()=>$("plantSaveDb").textContent="💾 Save plants to database", 2500);
 };
+
+/* ============ MANUAL TRACE EDITOR (RootNav 1-style node/branch control) ============
+ * Roots are polylines of draggable nodes with a parent hierarchy (primary → laterals).
+ * Draw: click to lay nodes; starting on an existing root branches a lateral. Edit: drag a node,
+ * click a segment to insert one, shift/right-click a node to delete, Delete removes a root+subtree.
+ * Measurements + RSML come from what you actually traced (no dependence on the noisy skeleton). */
+let traceMode=false, editSub="draw", editRoots=[], activeRoot=null, selRoot=null, dragNode=null, rootIdSeq=0;
+const rootById = id => editRoots.find(r=>r.id===id);
+const toNorm = (px,py) => [px/octx.width, py/octx.height];
+const toDisp = n => [n[0]*octx.width, n[1]*octx.height];
+function nearestNode(px,py,thr=10){ let best=null;
+  editRoots.forEach(r=>r.nodes.forEach((n,ni)=>{ const [x,y]=toDisp(n); const d=Math.hypot(x-px,y-py);
+    if(d<thr&&(!best||d<best.d)) best={id:r.id,ni,d}; })); return best; }
+function nearestSeg(px,py,thr=9){ let best=null;
+  editRoots.forEach(r=>{ for(let i=0;i<r.nodes.length-1;i++){ const a=toDisp(r.nodes[i]),b=toDisp(r.nodes[i+1]);
+    const dx=b[0]-a[0],dy=b[1]-a[1], L2=dx*dx+dy*dy||1, t=Math.max(0,Math.min(1,((px-a[0])*dx+(py-a[1])*dy)/L2));
+    const cx=a[0]+t*dx, cy=a[1]+t*dy, d=Math.hypot(cx-px,cy-py);
+    if(d<thr&&(!best||d<best.d)) best={id:r.id,seg:i,cx,cy,d}; } }); return best; }
+
+function traceSetSub(sub){ editSub=sub; activeRoot=null;
+  $("traceDrawBtn").classList.toggle("primary", sub==="draw");
+  $("traceEditBtn").classList.toggle("primary", sub==="edit");
+  $("traceHint").textContent = sub==="draw" ? "Click to lay nodes; double-click to finish. Start on a root to branch a lateral." : "Drag a node to move · click a segment to insert · shift-click a node to delete · Delete key removes a root."; }
+$("traceToggle").onclick = () => { traceMode=!traceMode;
+  if(traceMode){ roiMode=false; seedMode=false; $("roiDraw").classList.remove("primary"); $("seedDraw").classList.remove("primary"); }
+  $("traceToggle").classList.toggle("primary", traceMode); $("traceTools").hidden=!traceMode;
+  octx.style.cursor = traceMode ? "crosshair" : "default";
+  if(traceMode) traceSetSub("draw"); else $("traceHint").textContent="Hand-trace roots: click to lay nodes, drag to adjust; start on an existing root to branch a lateral.";
+  redrawOverlay(); };
+$("traceDrawBtn").onclick = () => traceSetSub("draw");
+$("traceEditBtn").onclick = () => traceSetSub("edit");
+$("traceClear").onclick = () => { editRoots=[]; activeRoot=selRoot=null; redrawOverlay(); };
+
+octx.addEventListener("pointerdown", e => {
+  if(!traceMode||!img) return; e.preventDefault();
+  const r=octx.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  if(editSub==="draw"){
+    if(activeRoot===null){
+      const seg=nearestSeg(px,py,10);
+      if(seg){ const parent=rootById(seg.id);                    // branch a lateral from an existing root
+        editRoots.push({id:++rootIdSeq, order:parent.order+1, parent:parent.id, nodes:[toNorm(seg.cx,seg.cy)]}); }
+      else { let sx=px,sy=py;                                    // new primary; snap to a nearby seed
+        for(const s of seeds){ const [dx,dy]=toDisp([s.x,s.y]); if(Math.hypot(dx-px,dy-py)<16){ sx=dx; sy=dy; break; } }
+        editRoots.push({id:++rootIdSeq, order:1, parent:null, nodes:[toNorm(sx,sy)]}); }
+      activeRoot=editRoots[editRoots.length-1].id; selRoot=activeRoot;
+    } else rootById(activeRoot).nodes.push(toNorm(px,py));
+    redrawOverlay();
+  } else {                                                       // edit
+    const nd=nearestNode(px,py);
+    if(nd){ selRoot=nd.id;
+      if(e.shiftKey||e.button===2){ const r2=rootById(nd.id); r2.nodes.splice(nd.ni,1);
+        if(r2.nodes.length<2) deleteRoot(nd.id); redrawOverlay(); computeTraceTraits(); }
+      else { dragNode=nd; try{octx.setPointerCapture(e.pointerId);}catch{} }
+      return; }
+    const seg=nearestSeg(px,py);
+    if(seg){ rootById(seg.id).nodes.splice(seg.seg+1,0,toNorm(seg.cx,seg.cy));
+      dragNode={id:seg.id,ni:seg.seg+1}; selRoot=seg.id; try{octx.setPointerCapture(e.pointerId);}catch{} redrawOverlay(); return; }
+    selRoot=null; redrawOverlay();
+  }
+});
+octx.addEventListener("pointermove", e => { if(!dragNode) return; const r=octx.getBoundingClientRect();
+  rootById(dragNode.id).nodes[dragNode.ni]=toNorm(e.clientX-r.left, e.clientY-r.top); redrawOverlay(); });
+octx.addEventListener("pointerup", () => { if(dragNode){ dragNode=null; computeTraceTraits(); } });
+octx.addEventListener("contextmenu", e => { if(traceMode) e.preventDefault(); });
+octx.addEventListener("dblclick", () => { if(traceMode && editSub==="draw"){
+  if(activeRoot!==null && rootById(activeRoot).nodes.length<2) deleteRoot(activeRoot);
+  activeRoot=null; redrawOverlay(); computeTraceTraits(); } });
+window.addEventListener("keydown", e => { if(traceMode && (e.key==="Delete"||e.key==="Backspace") && selRoot!=null){
+  deleteRoot(selRoot); selRoot=activeRoot=null; redrawOverlay(); computeTraceTraits(); } });
+function deleteRoot(id){                                        // remove a root and its whole subtree
+  const kill=new Set([id]); let grew=true;
+  while(grew){ grew=false; editRoots.forEach(r=>{ if(r.parent!=null && kill.has(r.parent) && !kill.has(r.id)){ kill.add(r.id); grew=true; } }); }
+  editRoots = editRoots.filter(r=>!kill.has(r.id));
+}
+
+function traceTraits(){                                         // measure from the vector roots
+  const sum=a=>a.reduce((x,y)=>x+y,0);
+  const rootLenPx = r => { let L=0; for(let i=1;i<r.nodes.length;i++){ const dx=(r.nodes[i][0]-r.nodes[i-1][0])*imgW, dy=(r.nodes[i][1]-r.nodes[i-1][1])*imgH; L+=Math.hypot(dx,dy);} return L; };
+  const valid=editRoots.filter(r=>r.nodes.length>=2);
+  const lenPx=sum(valid.map(rootLenPx));
+  const laterals=valid.filter(r=>r.parent!=null).length;
+  const childCount={}; valid.forEach(r=>{ if(r.parent!=null) childCount[r.parent]=(childCount[r.parent]||0)+1; });
+  const tips=valid.filter(r=>!childCount[r.id]).length;
+  const prim=valid.filter(r=>r.parent==null);
+  const skew = prim.length ? sum(prim.map(r=>{ const a=r.nodes[0],b=r.nodes[r.nodes.length-1];
+    return Math.atan2((b[0]-a[0])*imgW, Math.max(1,(b[1]-a[1])*imgH))*180/Math.PI; }))/prim.length : 0;
+  const lenCm = pxPerCm ? lenPx/pxPerCm : null;
+  return { count:valid.length, lengthVal: lenCm!=null?+lenCm.toFixed(2):Math.round(lenPx), lengthUnit: lenCm!=null?"cm":"px",
+    tips, branches:laterals, angle:+skew.toFixed(1) };
+}
+function computeTraceTraits(){
+  const t=traceTraits();
+  if(!t.count){ setTraits(lastResult?lastResult.traits:null); $("measScope").textContent = lastResult?"(whole image)":""; return; }
+  setTraits({length:`${t.lengthVal} ${t.lengthUnit}`, tips:t.tips, branches:t.branches, angle:t.angle});
+  $("measScope").textContent=`(manual trace · ${t.count} roots)`;
+  ["csvBtn","rsmlBtn","pngBtn","saveDbBtn"].forEach(b=>$(b).disabled=false);
+  lastTrace=t;
+}
+let lastTrace=null;
+$("traceMeasureBtn").onclick = () => computeTraceTraits();
+$("traceRsmlBtn").onclick = () => download("astroroot_trace.rsml", traceRSML(), "application/xml");
+function traceRSML(){
+  const byId=Object.fromEntries(editRoots.map(r=>[r.id,r]));
+  const kids=id=>editRoots.filter(r=>r.parent===id);
+  const node=r=>{ const pts=r.nodes.map(n=>`<point x="${(n[0]*imgW).toFixed(1)}" y="${(n[1]*imgH).toFixed(1)}"/>`).join("");
+    return `<root ID="r${r.id}"><geometry><polyline>${pts}</polyline></geometry>${kids(r.id).map(node).join("")}</root>`; };
+  const roots=editRoots.filter(r=>r.parent==null).map(node).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rsml><metadata><version>1</version><unit>${pxPerCm?"cm":"pixel"}</unit>`+
+    `<resolution>${pxPerCm?(pxPerCm/10).toFixed(4):1}</resolution><software>AstroRoot manual trace</software>`+
+    `<image><size width="${imgW}" height="${imgH}"/></image></metadata><scene><plant>${roots}</plant></scene></rsml>`;
+}
+$("traceFromAuto").onclick = () => {                            // seed editor polylines from the auto skeleton
+  if(!lastResult||!lastResult.skel){ alert("Run Trace roots first to get an auto-trace."); return; }
+  editRoots = skeletonToRoots(lastResult.skel, lastResult.pw, lastResult.ph);
+  activeRoot=selRoot=null; redrawOverlay(); computeTraceTraits();
+  $("traceHint").textContent=`Imported ${editRoots.length} segments from the auto-trace — now edit them.`;
+};
+function skeletonToRoots(skel, pw, ph){                         // split skeleton into editable polylines
+  const nbrs=(x,y)=>{ const o=[]; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue;
+    const nx=x+dx,ny=y+dy; if(nx>=0&&ny>=0&&nx<pw&&ny<ph&&skel[ny*pw+nx])o.push([nx,ny]); } return o; };
+  const isNode=(x,y)=>{ const d=nbrs(x,y).length; return d===1||d>=3; };
+  const seen=new Uint8Array(pw*ph), roots=[];
+  const ds=(p,mx)=>{ if(p.length<=mx)return p; const o=[],st=(p.length-1)/(mx-1); for(let i=0;i<mx;i++)o.push(p[Math.round(i*st)]); return o; };
+  for(let y=0;y<ph;y++)for(let x=0;x<pw;x++){ if(!skel[y*pw+x]||!isNode(x,y)) continue;
+    for(const st of nbrs(x,y)){ if(seen[st[1]*pw+st[0]]) continue;
+      let cx=st[0],cy=st[1],px=x,py=y; const path=[[x,y]];
+      while(true){ path.push([cx,cy]); seen[cy*pw+cx]=1; if(isNode(cx,cy)) break;
+        const ns=nbrs(cx,cy).filter(n=>!(n[0]===px&&n[1]===py) && !seen[n[1]*pw+n[0]]); if(!ns.length) break;
+        px=cx;py=cy;cx=ns[0][0];cy=ns[0][1]; }
+      if(path.length>=6){ const nd=ds(path,14).map(p=>[p[0]/pw,p[1]/ph]); if(nd.length>=2) roots.push({id:++rootIdSeq,order:1,parent:null,nodes:nd}); }
+    } }
+  return roots;
+}
+[$("roiDraw"),$("seedDraw")].forEach(b=> b && b.addEventListener("click", ()=>{      // leaving trace editor
+  if(traceMode){ traceMode=false; $("traceToggle").classList.remove("primary"); $("traceTools").hidden=true; redrawOverlay(); } }));
 function setTraits(t){
   $("tLen").textContent   = t ? t.length : "—";
   $("tTips").textContent  = t ? t.tips : "—";

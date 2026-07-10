@@ -18,6 +18,7 @@ into one page that works on a school Chromebook. Part of the
 | Feature | Status |
 |---|---|
 | **Single image** → traced overlay + measurements | ✅ |
+| **Manual trace editor** (RootNav 1-style) — draw roots, drag/insert/delete nodes, branch laterals; measure + RSML from the trace | ✅ full node & branch control; "From auto" seeds it from the model |
 | **Demo/test images** — NASA ABRS root timelapse (8 full plates + 10 single-root tiles) | ✅ Single picker + Batch "load demo set" |
 | **Plate-grid removal** — deterministic morphological filter, live before/after preview | ✅ "remove plate grid" toggle (Single + Batch) |
 | **Batch** (many images → one CSV) | ✅ |
