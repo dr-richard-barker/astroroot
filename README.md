@@ -30,6 +30,7 @@ into one page that works on a school Chromebook. Part of the
 | **Marker auto-detect** — colour card → colour-correction + scale (PlantCV-compatible) | ✅ Classic/Passport/Mini/Nano/CameraTrax/AstroCalibration + size + manual |
 | **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
 | **archiDART-comparable RSA traits** from RSML — TRL, per-order lengths, hull, surface/volume, tortuosity, Fitter topology, H0 barcode | ✅ [`docs/ARCHIDART_PARITY.md`](docs/ARCHIDART_PARITY.md) |
+| **Shape/density descriptors** from the mask — root-depth-density profile, width:depth, convex hull, directionality, mass-depth, solidity, mean diameter (PRIMAL-inspired) | ✅ traits + **root-depth-distribution chart** in the dashboard |
 | **Dashboard** — stats, charts, searchable table, per-record detail (root drawing + barcode), CSV/JSON export | ✅ `dashboard.html` |
 | **Groups** — multi-select records → named groups + per-group summary + filter | ✅ Flight-vs-Ground / genotype comparisons |
 | **Cloud sync** — pool measurements to Supabase (metadata only, RLS) | ✅ opt-in; keys stay in your browser |

@@ -95,6 +95,19 @@ line for each **genotype mean**, over the frames — switch the metric between *
 length, or tips. For the classic skew comparison, watch the skewing genotype's mean drift away
 from zero while the straight one stays flat.
 
+### Shape & density descriptors (PRIMAL-inspired)
+
+Every image analysis also computes a set of whole-root **descriptors** from the segmentation mask:
+a **30-bin root-density-by-depth profile** (mean root "crossings" at each depth), plus width, depth,
+**width:depth ratio**, convex-hull area, **directionality** (orientation coherence 0–1), **mass
+depth** (centre-of-mass depth, 0 = shallow → 1 = deep), **solidity** (filled fraction of the hull),
+and **mean diameter**. They show in the Single-tab method line, in each record's dashboard detail,
+and in the CSV export; the dashboard draws a **Root depth distribution** chart (depth top→bottom,
+mean crossings, one line per genotype group). These descriptors are **independently reimplemented**
+in the spirit of [PRIMAL](https://github.com/plantmodelling/primal) (Lobet group) — PRIMAL itself
+is unlicensed R/Shiny, so no code or data was reused. They are also the input-feature set for a
+planned ML estimator of hard-to-see lateral traits (count / density / length / angle).
+
 ### Groups & group summaries
 
 - **Tick the checkboxes** on any rows (or *select all filtered*) and click **Group selected…** to

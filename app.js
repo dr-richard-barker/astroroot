@@ -265,6 +265,7 @@ $("runBtn").onclick = async () => {
   const skel = zhangSuen(mask, P.w, P.h);
   const traits = measure(skel, P.w, P.h, pxPerCm, P.scale);
   lastResult = {mask, skel, traits, pw:P.w, ph:P.h, scale:P.scale};
+  lastResult.desc = computeDescriptors(mask, skel, P.w, P.h, P.scale, pxPerCm);   // PRIMAL-style descriptors
   redrawOverlay();
   setTraits(traits);
   measureROIs();
@@ -272,6 +273,8 @@ $("runBtn").onclick = async () => {
   $("methodNote").textContent = ortSession
     ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
+  if(lastResult.desc){ const d=lastResult.desc;
+    $("methodNote").textContent += ` · Descriptors: depth ${d.depth} ${d.unit}, W:D ${d.widthDepthRatio}, mass-depth ${d.comY}, directionality ${d.directionality}, solidity ${d.solidity}.`; }
   ["csvBtn","rsmlBtn","pngBtn","saveDbBtn"].forEach(b => $(b).disabled = false);
   $("editRow").hidden = false;
   $("runBtn").disabled = false; $("runBtn").textContent = "Trace roots";
@@ -296,6 +299,7 @@ $("saveDbBtn").onclick = async () => {
   if(!traits) return;
   const rec = resultRecord($("imgFile").files[0]?.name || $("demoImg").value, traits);
   if(manual) rec.engine = "manual trace";
+  else if(lastResult && lastResult.desc) applyDesc(rec, lastResult.desc);        // PRIMAL descriptors
   rec.thumb = thumbnail();
   await AR_DB.save(rec);
   const n = await AR_DB.count();
@@ -517,6 +521,58 @@ function clusterCount(pixels, w){
         const r=(y+dy)*w+(x+dx); if(set.has(r)&&!seen.has(r)){ seen.add(r); stack.push(r); } } }
   }
   return clusters;
+}
+
+/* ===== PRIMAL-inspired root descriptors (independently reimplemented; PRIMAL is unlicensed
+ * R/Shiny, so concept-only — see docs). Computed from the root mask + skeleton. These are also
+ * the input features for a future ML hidden-trait estimator (n_laterals / density / angle). */
+function convexArea(p){
+  if(p.length<3) return 0;
+  p=p.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[],up=[];
+  for(const q of p){ while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop(); lo.push(q); }
+  for(let i=p.length-1;i>=0;i--){ const q=p[i]; while(up.length>=2&&cross(up[up.length-2],up[up.length-1],q)<=0)up.pop(); up.push(q); }
+  const h=lo.slice(0,-1).concat(up.slice(0,-1)); let a=0;
+  for(let i=0;i<h.length;i++){ const j=(i+1)%h.length; a+=h[i][0]*h[j][1]-h[j][0]*h[i][1]; }
+  return Math.abs(a)/2;
+}
+function computeDescriptors(mask, skel, pw, ph, scale, ppc){
+  let minx=pw,maxx=-1,miny=ph,maxy=-1, area=0, sxSum=0, sySum=0;
+  for(let y=0;y<ph;y++)for(let x=0;x<pw;x++){ if(!mask[y*pw+x]) continue;
+    area++; sxSum+=x; sySum+=y; if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+  if(area===0) return null;
+  const wpx=maxx-minx+1, hpx=maxy-miny+1;
+  const toLen = v => ppc ? v/scale/ppc : v/scale;                    // proc px -> cm or image px
+  const unit = ppc ? "cm" : "px";
+  // 30-bin depth profile: mean number of root "crossings" (separate runs) per row, by depth
+  const BINS=30, prof=new Array(BINS).fill(0), nrow=new Array(BINS).fill(0);
+  for(let y=miny;y<=maxy;y++){ let runs=0, on=false;
+    for(let x=minx;x<=maxx;x++){ const v=!!mask[y*pw+x]; if(v&&!on){runs++;on=true;} else if(!v)on=false; }
+    const b=Math.min(BINS-1, Math.floor((y-miny)/(hpx||1)*BINS)); prof[b]+=runs; nrow[b]++; }
+  for(let b=0;b<BINS;b++) prof[b] = nrow[b] ? +(prof[b]/nrow[b]).toFixed(2) : 0;
+  // convex hull from per-row left/right extremes
+  const pts=[]; for(let y=miny;y<=maxy;y++){ let lo=-1,hi=-1;
+    for(let x=minx;x<=maxx;x++){ if(mask[y*pw+x]){ if(lo<0)lo=x; hi=x; } } if(lo>=0){ pts.push([lo,y]); pts.push([hi,y]); } }
+  const hull=convexArea(pts);
+  // skeleton length + orientation coherence (directionality 0..1)
+  let slen=0, C=0, S=0, N=0;
+  for(let y=1;y<ph-1;y++)for(let x=1;x<pw-1;x++){ if(!skel[y*pw+x]) continue; slen++;
+    let dxs=0,dys=0,deg=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue; if(skel[(y+dy)*pw+(x+dx)]){deg++;dxs+=dx;dys+=dy;} }
+    if(deg>=1){ const a=Math.atan2(dxs,dys); C+=Math.cos(2*a); S+=Math.sin(2*a); N++; } }
+  return {
+    depthProfile: prof, unit,
+    width:+toLen(wpx).toFixed(2), depth:+toLen(hpx).toFixed(2), widthDepthRatio:+(wpx/hpx).toFixed(3),
+    convexHull: ppc ? +(hull/scale/scale/ppc/ppc).toFixed(2) : +(hull/scale/scale).toFixed(1),
+    comY:+((sySum/area-miny)/(hpx||1)).toFixed(3), comX:+((sxSum/area-minx)/(wpx||1)).toFixed(3),
+    directionality: N ? +(Math.hypot(C,S)/N).toFixed(3) : 0,
+    meanDiameter: slen ? +toLen(area/slen).toFixed(3) : 0,
+    solidity:+(area/(hull||1)).toFixed(3)
+  };
+}
+function applyDesc(rec, d){                                          // merge descriptor fields onto a DB record
+  if(!d) return; for(const k of ["width","depth","widthDepthRatio","convexHull","comY","comX","directionality","meanDiameter","solidity"]) rec[k]=d[k];
+  rec.depthProfile = d.depthProfile;
 }
 
 /* ---------- draw + results ---------- */
@@ -919,9 +975,10 @@ $("batchRun").onclick = async () => {
         lengthVal:x.traits.lengthVal, lengthUnit:x.traits.lengthUnit, tips:x.traits.tips, branches:x.traits.branches,
         angle:+x.traits.angle.toFixed(1), group:x.name, frame:files[i].name, thumb:null });
     } else {
-      batchRecords.push({ ts, name:files[i].name, engine:eng, marker:"batch", pxPerCm:ppc, colorCorrected:false,
+      const rec={ ts, name:files[i].name, engine:eng, marker:"batch", pxPerCm:ppc, colorCorrected:false,
         lengthVal:R.whole.lengthVal, lengthUnit:R.whole.lengthUnit, tips:R.whole.tips, branches:R.whole.branches,
-        angle:+R.whole.angle.toFixed(1), group:null, frame:files[i].name, thumb:null });
+        angle:+R.whole.angle.toFixed(1), group:null, frame:files[i].name, thumb:null };
+      applyDesc(rec, R.desc); batchRecords.push(rec);
     }
     batchRows.push({name:files[i].name, ...R.whole});
     const tr=document.createElement("tr");
@@ -945,7 +1002,7 @@ function processFile(file, ppc){
     if($("deGridBatch").checked) removeGrid(P.rgba,P.w,P.h);
     let mask; if(ortSession){ try{mask=await segmentOnnx(P.rgba,P.w,P.h);}catch{ mask=segmentClassical(P.rgba,P.w,P.h);} } else mask=segmentClassical(P.rgba,P.w,P.h);
     const skel=zhangSuen(mask,P.w,P.h);
-    res({ whole:measure(skel,P.w,P.h,ppc,P.scale), skel, pw:P.w, ph:P.h, scale:P.scale });
+    res({ whole:measure(skel,P.w,P.h,ppc,P.scale), desc:computeDescriptors(mask,skel,P.w,P.h,P.scale,ppc), skel, pw:P.w, ph:P.h, scale:P.scale });
   }; im.src=URL.createObjectURL(file); });
 }
 $("batchCsv").onclick = () => {

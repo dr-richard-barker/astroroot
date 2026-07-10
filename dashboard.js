@@ -94,6 +94,7 @@ function renderCharts(rows){
                                       units.length===1?units[0]:"", "var(--accent)");
   $("chartAngle").innerHTML = histogram(rows.map(r=>r.angle).filter(v=>typeof v==="number"), "°", "var(--accent2)");
   renderTrajectory(rows);
+  renderDepthProfile(rows);
 }
 
 const TRAJ_PALETTE = ["#3fb950","#58a6ff","#d29922","#f85149","#b07fd0","#e668a7","#39c5cf","#db6d28"];
@@ -132,6 +133,31 @@ function renderTrajectory(rows){
     ` · thin = each plant, thick = genotype mean · ${keys.length} plant-tracks over ${allTs.length} frames`;
 }
 $("trajMetric").onchange = () => renderTrajectory(view());
+
+function renderDepthProfile(rows){                                   // PRIMAL-style root-density-by-depth
+  const withP = rows.filter(r=>Array.isArray(r.depthProfile) && r.depthProfile.length);
+  if(!withP.length){ $("depthBox").style.display="none"; return; }
+  $("depthBox").style.display="block";
+  const BINS = withP[0].depthProfile.length;
+  const byGroup={}; withP.forEach(r=>{ const g=r.group||"all"; (byGroup[g]=byGroup[g]||[]).push(r.depthProfile); });
+  const groups=Object.keys(byGroup), means={}; let maxC=0;
+  groups.forEach(g=>{ const arr=byGroup[g], m=new Array(BINS).fill(0);
+    arr.forEach(p=>{ for(let b=0;b<BINS;b++) m[b]+=(+p[b]||0); });
+    for(let b=0;b<BINS;b++){ m[b]/=arr.length; if(m[b]>maxC)maxC=m[b]; } means[g]=m; });
+  maxC=maxC||1;
+  const W=360,H=300,pad=34;
+  const sx=v=>pad+(W-2*pad)*v/maxC, sy=b=>pad+(H-2*pad)*b/(BINS-1);
+  const gcol=g=>TRAJ_PALETTE[groups.indexOf(g)%TRAJ_PALETTE.length];
+  let paths="";
+  groups.forEach(g=>{ const m=means[g];
+    paths+=`<polyline points="${m.map((v,b)=>sx(v).toFixed(1)+","+sy(b).toFixed(1)).join(" ")}" fill="none" stroke="${gcol(g)}" stroke-width="2.5"/>`;
+    paths+=m.map((v,b)=>`<circle cx="${sx(v).toFixed(1)}" cy="${sy(b).toFixed(1)}" r="1.6" fill="${gcol(g)}"/>`).join(""); });
+  const axis=`<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="var(--edge)"/><line x1="${pad}" y1="${pad}" x2="${W-pad}" y2="${pad}" stroke="var(--edge)"/>`+
+    `<text x="${pad+3}" y="${pad-6}" font-size="10" fill="var(--muted)">shallow</text><text x="${pad+3}" y="${H-pad+14}" font-size="10" fill="var(--muted)">deep ↓</text>`+
+    `<text x="${W-pad}" y="${pad-6}" font-size="10" fill="var(--muted)" text-anchor="end">${maxC.toFixed(1)} crossings →</text>`;
+  $("depthChart").innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${paths}</svg>`;
+  $("depthLegend").innerHTML = groups.length>1 ? groups.map(g=>`<span style="color:${gcol(g)};font-weight:700">■</span> ${esc(g)}`).join("  ") : `${withP.length} record(s)`;
+}
 
 function renderTable(rows){
   const tb = $("tbl").querySelector("tbody");
@@ -180,7 +206,11 @@ function showDetail(rec){
   else if(rec.geom) $("detailImage").innerHTML = rootSVG(rec.geom, 200, 260, 2) + `<div class="tlbl">root system (colour = branching order)</div>`;
   else $("detailImage").innerHTML = `<div class="tlbl">no image</div>`;
   const a = rec.arch;
-  if(!a){ $("detailTraits").innerHTML = `<p class="method">This record has basic traits only (length ${rec.lengthVal} ${rec.lengthUnit}, tips ${rec.tips}, branches ${rec.branches}, angle ${rec.angle}°). Import RSML for the full archiDART trait set.</p>`; $("detailBarcode").innerHTML=""; $("detail").scrollIntoView({behavior:"smooth",block:"nearest"}); return; }
+  if(!a){
+    let html = `<p class="method">Basic traits: length ${rec.lengthVal} ${rec.lengthUnit}, tips ${rec.tips}, branches ${rec.branches}, angle ${rec.angle}°. Import RSML for the full archiDART set.</p>`;
+    if(rec.depth!=null){ const ds=[["Depth",`${rec.depth} ${rec.lengthUnit}`],["Width:Depth",rec.widthDepthRatio],["Mass depth",rec.comY],["Directionality",rec.directionality],["Solidity",rec.solidity],["Mean diameter",rec.meanDiameter]];
+      html += `<div class="traitgrid">`+ds.filter(d=>d[1]!=null).map(([k,v])=>`<div class="trait"><div class="tval">${v}</div><div class="tlbl">${k}</div></div>`).join("")+`</div>`; }
+    $("detailTraits").innerHTML=html; $("detailBarcode").innerHTML=""; $("detail").scrollIntoView({behavior:"smooth",block:"nearest"}); return; }
   const u = rec.lengthUnit;
   const cells = Object.keys(ARCH_LABELS).filter(k=>a[k]!=null).map(k=>{
     let v=a[k]; const unit = /length|height|width|altitude|persistence|MLR|L1R|TRL|TLRL/.test(k)?` ${u}`:
@@ -229,11 +259,12 @@ document.querySelector("#tbl thead").onclick = e=>{ const k=e.target.dataset.sor
 /* controls */
 $("search").oninput = e=>{ filter=e.target.value; render(); };
 $("expCsv").onclick = ()=>{ const rows=view();
-  const A=["TRL","L1R","TN1R","TNLR","TLRL","MLR","D2LR","maxOrder","height","width","convexHullXY","MDLR","Stot","Vtot","tortuosity","magnitude","altitude","extPathLength","maxPersistence"];
+  const A=["TRL","L1R","TN1R","TNLR","TLRL","MLR","D2LR","maxOrder","height","width","convexHullXY","MDLR","Stot","Vtot","tortuosity","magnitude","altitude","extPathLength","maxPersistence",
+    "depth","widthDepthRatio","convexHull","comY","comX","directionality","meanDiameter","solidity"];
   let csv="name,date,engine,marker,px_per_cm,length,unit,color_corrected,tips,branches,angle,"+A.join(",")+"\n";
   rows.forEach(r=>{ const a=r.arch||{};
     csv+=`${r.name},${fmtDate(r.ts)},${r.engine},${r.marker},${r.pxPerCm||""},${r.lengthVal},${r.lengthUnit},${r.colorCorrected?1:0},${r.tips},${r.branches},${r.angle},`+
-      A.map(k=>a[k]!=null?a[k]:"").join(",")+"\n"; });
+      A.map(k=>a[k]!=null?a[k]:(r[k]!=null?r[k]:"")).join(",")+"\n"; });
   dl("astroroot_database.csv", csv, "text/csv"); };
 $("expJson").onclick = async ()=>dl("astroroot_backup.json", await AR_DB.exportJSON(), "application/json");
 $("impJson").onchange = async e=>{ const f=e.target.files[0]; if(!f) return; const n=await AR_DB.importJSON(await f.text()); alert(`Imported ${n} records.`); load(); };
