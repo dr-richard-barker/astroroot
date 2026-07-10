@@ -141,6 +141,114 @@
       "label": "Single-root tile (FL) #10",
       "kind": "tile",
       "cond": "FL"
+    },
+    {
+      "file": "apex03/apex03_FLT_Col0_304.jpg",
+      "label": "APEX-03 \u00b7 Flight \u00b7 Col-0 (11d)",
+      "kind": "apex03",
+      "genotype": "Col-0",
+      "cond": "Flight",
+      "day": 11,
+      "bytes": 179540
+    },
+    {
+      "file": "apex03/apex03_FLT_Sku5_305.jpg",
+      "label": "APEX-03 \u00b7 Flight \u00b7 Sku5 (11d)",
+      "kind": "apex03",
+      "genotype": "Sku5",
+      "cond": "Flight",
+      "day": 11,
+      "bytes": 157339
+    },
+    {
+      "file": "apex03/apex03_FLT_WS_301.jpg",
+      "label": "APEX-03 \u00b7 Flight \u00b7 WS (11d)",
+      "kind": "apex03",
+      "genotype": "WS",
+      "cond": "Flight",
+      "day": 11,
+      "bytes": 178099
+    },
+    {
+      "file": "apex03/apex03_FLT_WS_302.jpg",
+      "label": "APEX-03 \u00b7 Flight \u00b7 WS (11d)",
+      "kind": "apex03",
+      "genotype": "WS",
+      "cond": "Flight",
+      "day": 11,
+      "bytes": 187411
+    },
+    {
+      "file": "apex03/apex03_FLT_WS_303.jpg",
+      "label": "APEX-03 \u00b7 Flight \u00b7 WS (11d)",
+      "kind": "apex03",
+      "genotype": "WS",
+      "cond": "Flight",
+      "day": 11,
+      "bytes": 179904
+    },
+    {
+      "file": "apex03/apex03_FLT_spr1_306.jpg",
+      "label": "APEX-03 \u00b7 Flight \u00b7 spr1 (11d)",
+      "kind": "apex03",
+      "genotype": "spr1",
+      "cond": "Flight",
+      "day": 11,
+      "bytes": 165272
+    },
+    {
+      "file": "apex03/apex03_GC_Col0_404.jpg",
+      "label": "APEX-03 \u00b7 Ground \u00b7 Col-0 (11d)",
+      "kind": "apex03",
+      "genotype": "Col-0",
+      "cond": "Ground",
+      "day": 11,
+      "bytes": 178638
+    },
+    {
+      "file": "apex03/apex03_GC_Sku5_405.jpg",
+      "label": "APEX-03 \u00b7 Ground \u00b7 Sku5 (11d)",
+      "kind": "apex03",
+      "genotype": "Sku5",
+      "cond": "Ground",
+      "day": 11,
+      "bytes": 181983
+    },
+    {
+      "file": "apex03/apex03_GC_WS_401.jpg",
+      "label": "APEX-03 \u00b7 Ground \u00b7 WS (11d)",
+      "kind": "apex03",
+      "genotype": "WS",
+      "cond": "Ground",
+      "day": 11,
+      "bytes": 203105
+    },
+    {
+      "file": "apex03/apex03_GC_WS_402.jpg",
+      "label": "APEX-03 \u00b7 Ground \u00b7 WS (11d)",
+      "kind": "apex03",
+      "genotype": "WS",
+      "cond": "Ground",
+      "day": 11,
+      "bytes": 185918
+    },
+    {
+      "file": "apex03/apex03_GC_WS_403.jpg",
+      "label": "APEX-03 \u00b7 Ground \u00b7 WS (11d)",
+      "kind": "apex03",
+      "genotype": "WS",
+      "cond": "Ground",
+      "day": 11,
+      "bytes": 211317
+    },
+    {
+      "file": "apex03/apex03_GC_spr1_406.jpg",
+      "label": "APEX-03 \u00b7 Ground \u00b7 spr1 (11d)",
+      "kind": "apex03",
+      "genotype": "spr1",
+      "cond": "Ground",
+      "day": 11,
+      "bytes": 155550
     }
   ]
 }

@@ -34,3 +34,9 @@ from https://github.com/dr-richard-barker/image-analysis-software-and-R-codes
 (ABRS_NASA_Roots_TimeLapse). See Paul, Amalfitano & Ferl (2012) BMC Plant Biology 12:232.
 Sample RSML in `samples/tictoc/` are from the TICTOC cotton study
 (https://github.com/dr-richard-barker/TICTOC).
+
+The demo images in `samples/images/apex03/` are web-optimized copies of APEX-03 / TAGES-ISA
+ISS root plate photographs (Col-0, WS, spr1/SKU6, sku5; flight + ground control) from the same
+image-analysis-software-and-R-codes repository (APEX03/). See Califar et al. (2020) "Root
+Skewing-Associated Genes Impact the Spaceflight Response of Arabidopsis thaliana", Front. Plant
+Sci. 11:239.

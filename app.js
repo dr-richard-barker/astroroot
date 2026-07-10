@@ -28,7 +28,7 @@ $("imgFile").onchange = e => loadImage(e.target.files[0]);
 /* demo/test images — NASA ABRS root timelapse (flight + ground) */
 (async function initDemoImages(){
   try{
-    const idx = await (await fetch("samples/images/index.json")).json();
+    const idx = await (await fetch("samples/images/index.json", {cache:"no-cache"})).json();
     const sel = $("demoImg");
     idx.files.forEach(f => sel.add(new Option(f.label, f.file)));
     sel.onchange = () => $("loadDemo").disabled = !sel.value;
@@ -48,7 +48,7 @@ $("loadDemo").onclick = async () => {
 $("loadDemoBatch").onclick = async () => {
   $("loadDemoBatch").disabled = true; $("loadDemoBatch").textContent = "loading…";
   try{
-    const idx = await (await fetch("samples/images/index.json")).json();
+    const idx = await (await fetch("samples/images/index.json", {cache:"no-cache"})).json();
     const dt = new DataTransfer();
     for(const f of idx.files) dt.items.add(await fetchAsFile(`samples/images/${encodeURIComponent(f.file)}`));
     $("batchFiles").files = dt.files; $("batchRun").disabled = false;

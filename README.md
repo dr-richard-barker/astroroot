@@ -84,7 +84,7 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `samples/18_way_skew.json` | bundled sample dataset (53 RootNav skew plates) |
 | `samples/stereotypes/*.rsml` | 5 extreme-stereotype architectures (archidart-style demo) |
 | `samples/tictoc/*.rsml` | 24 TICTOC cotton root systems (Flight vs Ground, day 6) |
-| `samples/images/*.jpg` | 8 NASA ABRS timelapse demo images + `tiles/` (10 single-root crops) |
+| `samples/images/*.jpg` | 8 NASA ABRS timelapse demo images + `tiles/` (10 single-root crops) + `apex03/` (12 APEX-03 plates: Col-0/WS/spr1/sku5, FL vs GC) |
 | `scripts/grid_remove.py` | reference impl of the grid filter (developed on the ABRS data) |
 | `docs/ARCHIDART_PARITY.md` | honest map of archiDART trait coverage |
 | `supabase/schema.sql` | table + Row Level Security to run in your Supabase project |
