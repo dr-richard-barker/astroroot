@@ -25,6 +25,8 @@ let ortSession = null, ortModelName = null, ortBackend = null;
 
 $("imgFile").onchange = e => loadImage(e.target.files[0]);
 
+AR_EST.load();                                              // load the ML lateral-trait estimator
+
 /* demo/test images — NASA ABRS root timelapse (flight + ground) */
 (async function initDemoImages(){
   try{
@@ -274,7 +276,11 @@ $("runBtn").onclick = async () => {
     ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
   if(lastResult.desc){ const d=lastResult.desc;
-    $("methodNote").textContent += ` · Descriptors: depth ${d.depth} ${d.unit}, W:D ${d.widthDepthRatio}, mass-depth ${d.comY}, directionality ${d.directionality}, solidity ${d.solidity}.`; }
+    $("methodNote").textContent += ` · Descriptors: depth ${d.depth} ${d.unit}, W:D ${d.widthDepthRatio}, mass-depth ${d.comY}, directionality ${d.directionality}, solidity ${d.solidity}.`;
+    lastResult.est = AR_EST.predict(d);                     // ML estimate of hidden lateral traits
+    if(lastResult.est){ const e=lastResult.est;
+      $("methodNote").textContent += ` · ML estimate: ~${e.n_laterals} laterals, lateral fraction ${e.lateral_fraction}, angle ~${e.lat_angle}° (synthetic-trained — treat as an estimate).`; }
+  }
   ["csvBtn","rsmlBtn","pngBtn","saveDbBtn"].forEach(b => $(b).disabled = false);
   $("editRow").hidden = false;
   $("runBtn").disabled = false; $("runBtn").textContent = "Trace roots";
@@ -331,11 +337,12 @@ function segmentClassical(rgba, w, h){
   const mean = sum/n;
   const t = otsu(gray);
   // roots are usually darker than background; if background is dark, invert.
-  const rootsAreDark = mean > t;
-  const mask = new Uint8Array(n);
-  // note: Otsu can land the threshold on the darker cluster's value, so the dark side is
-  // inclusive (<=) to avoid dropping root pixels; the light side stays exclusive (>).
-  for(let i=0;i<n;i++) mask[i] = (rootsAreDark ? gray[i] <= t : gray[i] > t) ? 1 : 0;
+  let rootsAreDark = mean > t;
+  const build = dark => { const m=new Uint8Array(n); let c=0;
+    // Otsu can land on the darker cluster's value, so the dark side is inclusive (<=).
+    for(let i=0;i<n;i++){ m[i]=(dark ? gray[i]<=t : gray[i]>t)?1:0; c+=m[i]; } return {m,c}; };
+  let {m:mask,c} = build(rootsAreDark);
+  if(c > n*0.5){ rootsAreDark=!rootsAreDark; mask=build(rootsAreDark).m; }   // roots are the minority class, never the background
   removeSpecks(mask, w, h, 20);
   return mask;
 }
@@ -573,6 +580,8 @@ function computeDescriptors(mask, skel, pw, ph, scale, ppc){
 function applyDesc(rec, d){                                          // merge descriptor fields onto a DB record
   if(!d) return; for(const k of ["width","depth","widthDepthRatio","convexHull","comY","comX","directionality","meanDiameter","solidity"]) rec[k]=d[k];
   rec.depthProfile = d.depthProfile;
+  const e = (typeof AR_EST!=="undefined") ? AR_EST.predict(d) : null;   // ML hidden-trait estimate
+  if(e){ rec.est_n_laterals=e.n_laterals; rec.est_lat_angle=e.lat_angle; rec.est_lateral_fraction=e.lateral_fraction; }
 }
 
 /* ---------- draw + results ---------- */

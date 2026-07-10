@@ -210,6 +210,8 @@ function showDetail(rec){
     let html = `<p class="method">Basic traits: length ${rec.lengthVal} ${rec.lengthUnit}, tips ${rec.tips}, branches ${rec.branches}, angle ${rec.angle}°. Import RSML for the full archiDART set.</p>`;
     if(rec.depth!=null){ const ds=[["Depth",`${rec.depth} ${rec.lengthUnit}`],["Width:Depth",rec.widthDepthRatio],["Mass depth",rec.comY],["Directionality",rec.directionality],["Solidity",rec.solidity],["Mean diameter",rec.meanDiameter]];
       html += `<div class="traitgrid">`+ds.filter(d=>d[1]!=null).map(([k,v])=>`<div class="trait"><div class="tval">${v}</div><div class="tlbl">${k}</div></div>`).join("")+`</div>`; }
+    if(rec.est_n_laterals!=null){ const es=[["~"+rec.est_n_laterals,"Est. laterals"],[rec.est_lateral_fraction,"Lateral fraction"],["~"+rec.est_lat_angle+"°","Est. lat. angle"]];
+      html += `<div class="tlbl" style="margin-top:8px">ML estimate (synthetic-trained)</div><div class="traitgrid">`+es.map(([v,k])=>`<div class="trait"><div class="tval">${v}</div><div class="tlbl">${k}</div></div>`).join("")+`</div>`; }
     $("detailTraits").innerHTML=html; $("detailBarcode").innerHTML=""; $("detail").scrollIntoView({behavior:"smooth",block:"nearest"}); return; }
   const u = rec.lengthUnit;
   const cells = Object.keys(ARCH_LABELS).filter(k=>a[k]!=null).map(k=>{
@@ -260,7 +262,8 @@ document.querySelector("#tbl thead").onclick = e=>{ const k=e.target.dataset.sor
 $("search").oninput = e=>{ filter=e.target.value; render(); };
 $("expCsv").onclick = ()=>{ const rows=view();
   const A=["TRL","L1R","TN1R","TNLR","TLRL","MLR","D2LR","maxOrder","height","width","convexHullXY","MDLR","Stot","Vtot","tortuosity","magnitude","altitude","extPathLength","maxPersistence",
-    "depth","widthDepthRatio","convexHull","comY","comX","directionality","meanDiameter","solidity"];
+    "depth","widthDepthRatio","convexHull","comY","comX","directionality","meanDiameter","solidity",
+    "est_n_laterals","est_lat_angle","est_lateral_fraction"];
   let csv="name,date,engine,marker,px_per_cm,length,unit,color_corrected,tips,branches,angle,"+A.join(",")+"\n";
   rows.forEach(r=>{ const a=r.arch||{};
     csv+=`${r.name},${fmtDate(r.ts)},${r.engine},${r.marker},${r.pxPerCm||""},${r.lengthVal},${r.lengthUnit},${r.colorCorrected?1:0},${r.tips},${r.branches},${r.angle},`+

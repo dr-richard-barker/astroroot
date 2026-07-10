@@ -105,8 +105,25 @@ and **mean diameter**. They show in the Single-tab method line, in each record's
 and in the CSV export; the dashboard draws a **Root depth distribution** chart (depth top→bottom,
 mean crossings, one line per genotype group). These descriptors are **independently reimplemented**
 in the spirit of [PRIMAL](https://github.com/plantmodelling/primal) (Lobet group) — PRIMAL itself
-is unlicensed R/Shiny, so no code or data was reused. They are also the input-feature set for a
-planned ML estimator of hard-to-see lateral traits (count / density / length / angle).
+is unlicensed R/Shiny, so no code or data was reused. They are also the input-feature set for the ML estimator below.
+
+### ML hidden-trait estimator
+
+Some traits — **how many laterals**, their **angle**, and the **lateral fraction** (lateral length ÷
+total) — are hard to read directly off a 2-D image because laterals overlap. Following PRIMAL's
+idea, AstroRoot ships a small **MLP** (`estimator.js` + `models/lateral_estimator.json`) that maps
+the scale-invariant descriptors above to those hidden traits. It's a **pure-JS forward pass** (no
+runtime dependency); the estimate appears in the Single-tab method line, the record detail, and the
+CSV export.
+
+**How it was made & how good it is.** Trained (`scripts/train_lateral_estimator.py`) on a **synthetic
+root library** where the true traits are known — the same trick PRIMAL uses — with features computed
+by an exact port of the app's descriptor code (verified: JS and Python descriptors match to the
+digit on the same image). Held-out synthetic accuracy: **lateral fraction R²≈0.84, #laterals
+R²≈0.79 (±~4), angle R²≈0.57 (±~9°)**. So treat it as a **guide, not a gold measurement** —
+lateral fraction and angle are the most reliable; exact lateral counts are approximate, and real-image
+accuracy should be checked against real ground truth. PRIMAL (unlicensed R/Shiny) is the concept
+inspiration only — no code, data, or model was reused.
 
 ### Groups & group summaries
 

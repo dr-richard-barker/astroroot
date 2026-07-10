@@ -31,6 +31,7 @@ into one page that works on a school Chromebook. Part of the
 | **Local database** (IndexedDB) — save single/batch results on-device | ✅ |
 | **archiDART-comparable RSA traits** from RSML — TRL, per-order lengths, hull, surface/volume, tortuosity, Fitter topology, H0 barcode | ✅ [`docs/ARCHIDART_PARITY.md`](docs/ARCHIDART_PARITY.md) |
 | **Shape/density descriptors** from the mask — root-depth-density profile, width:depth, convex hull, directionality, mass-depth, solidity, mean diameter (PRIMAL-inspired) | ✅ traits + **root-depth-distribution chart** in the dashboard |
+| **ML hidden-trait estimator** — estimates #laterals, lateral angle & lateral fraction from the descriptors (PRIMAL-style, synthetic-trained MLP, pure-JS) | ✅ `estimator.js` + `models/lateral_estimator.json`; shown as an estimate |
 | **Dashboard** — stats, charts, searchable table, per-record detail (root drawing + barcode), CSV/JSON export | ✅ `dashboard.html` |
 | **Groups** — multi-select records → named groups + per-group summary + filter | ✅ Flight-vs-Ground / genotype comparisons |
 | **Cloud sync** — pool measurements to Supabase (metadata only, RLS) | ✅ opt-in; keys stay in your browser |
