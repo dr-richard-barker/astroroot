@@ -27,6 +27,80 @@ $("imgFile").onchange = e => loadImage(e.target.files[0]);
 
 AR_EST.load();                                              // load the ML lateral-trait estimator
 
+/* ================= DOWNLOADABLE SUMMARY REPORT ================= */
+function tracedImageURI(){
+  const m=document.createElement("canvas"); m.width=cv.width; m.height=cv.height;
+  const x=m.getContext("2d"); x.drawImage(cv,0,0); x.drawImage(octx,0,0); return m.toDataURL("image/jpeg",0.72);
+}
+function barChart(title, items, unit, color){                // items:[{label,value}] → inline SVG bar chart
+  if(!items.length) return "";
+  const W=520,H=60+items.length*26,padL=140,padR=40, max=Math.max(...items.map(i=>Math.abs(i.value)),1e-9);
+  const zero = items.some(i=>i.value<0);
+  const x0 = zero ? padL+(W-padL-padR)*0.5 : padL, span = zero ? (W-padL-padR)*0.5 : (W-padL-padR);
+  const bars=items.map((it,i)=>{ const y=34+i*26, w=span*Math.abs(it.value)/max, bx=it.value<0?x0-w:x0;
+    return `<rect x="${bx.toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="16" fill="${it.color||color}"/>`+
+      `<text x="${padL-6}" y="${y+12}" font-size="11" text-anchor="end" fill="#333">${esc(it.label)}</text>`+
+      `<text x="${(it.value<0?bx-4:bx+w+4).toFixed(1)}" y="${y+12}" font-size="10" fill="#555" text-anchor="${it.value<0?'end':'start'}">${(+it.value).toFixed(1)}${unit||""}</text>`; }).join("");
+  const axis = zero?`<line x1="${x0}" y1="26" x2="${x0}" y2="${H-14}" stroke="#bbb"/>`:"";
+  return `<h3>${esc(title)}</h3><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${bars}</svg>`;
+}
+function depthProfileSVG(prof){
+  if(!prof||!prof.length) return ""; const W=420,H=150,pad=26, max=Math.max(...prof,1e-9), bw=(W-2*pad)/prof.length;
+  const bars=prof.map((v,i)=>`<rect x="${(pad+i*bw+1).toFixed(1)}" y="${(H-pad-(H-2*pad)*v/max).toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${((H-2*pad)*v/max).toFixed(1)}" fill="#1a7f37"/>`).join("");
+  return `<h3>Root depth distribution</h3><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${bars}`+
+    `<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#ccc"/><text x="${pad}" y="${H-8}" font-size="10" fill="#777">top</text><text x="${W-pad}" y="${H-8}" font-size="10" fill="#777" text-anchor="end">tip →</text></svg>`;
+}
+function tableHTML(headers, rows){
+  return `<table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>`+
+    rows.map(r=>`<tr>${r.map(c=>`<td>${c==null?"—":esc(String(c))}</td>`).join("")}</tr>`).join("")+`</tbody></table>`;
+}
+function buildReport(){
+  const name = ($("imgFile").files[0]?.name) || $("demoImg").value || "image";
+  const t = lastResult && lastResult.traits, d = lastResult && lastResult.desc, e = lastResult && lastResult.est;
+  const eng = ortSession?`RootNav2 (${ortBackend})`:"classical";
+  const cal = pxPerCm ? `${pxPerCm.toFixed(1)} px/cm` : "uncalibrated (px)";
+  let body = `<h1>AstroRoot — root analysis report</h1>
+    <p class="meta"><b>${esc(name)}</b> · engine: ${esc(eng)} · scale: ${cal}${markerInfo?` · marker: ${esc(markerInfo.type)}`:""}</p>
+    <img class="trace" src="${tracedImageURI()}" alt="traced root image"/>`;
+  if(t) body += `<h2>Measurements — whole image</h2>`+tableHTML(["Length","Tips","Branches","Angle from vertical"],
+    [[t.length, t.tips, t.branches, `${t.angle.toFixed(1)}°`]]);
+  if(d) body += depthProfileSVG(d.depthProfile) + tableHTML(["Depth","Width:Depth","Mass-depth","Directionality","Solidity","Convex hull"],
+    [[`${d.depth} ${d.unit}`, d.widthDepthRatio, d.comY, d.directionality, d.solidity, d.convexHull]]);
+  if(e) body += `<h2>Estimated lateral traits <span class="tag">AI estimate</span></h2>`+
+    tableHTML(["Est. #laterals","Lateral fraction","Est. lateral angle"],[[`~${e.n_laterals}`, e.lateral_fraction, `~${e.lat_angle}°`]])+
+    `<p class="cap">Synthetic-trained estimate — treat as a guide, not an exact count.</p>`;
+  if(roiResults.length){ body += `<h2>Per region</h2>`+
+    tableHTML(["Region","Length","Tips","Branches","Angle°"], roiResults.map(r=>[r.name, `${r.traits.lengthVal.toFixed?r.traits.lengthVal.toFixed(1):r.traits.lengthVal} ${r.traits.lengthUnit}`, r.traits.tips, r.traits.branches, r.traits.angle.toFixed(1)]))+
+    barChart("Mean angle by region", roiResults.map(r=>({label:r.name, value:r.traits.angle})), "°", "#0969da"); }
+  if(plantResults.length){ const gcol={}; const pal=["#1a7f37","#0969da","#9a6700","#cf222e","#8250df"]; let gi=0;
+    plantResults.forEach(p=>{ const g=p.geno||"—"; if(!(g in gcol)) gcol[g]=pal[gi++%pal.length]; });
+    body += `<h2>Per plant</h2>`+
+    tableHTML(["#","Genotype","Length","Tips","Skew°"], plantResults.map(p=>[p.plant, p.geno||"—", `${p.traits.lengthVal.toFixed?p.traits.lengthVal.toFixed(1):p.traits.lengthVal} ${p.traits.lengthUnit}`, p.traits.tips, p.skew.toFixed(1)]))+
+    barChart("Skew by plant (colour = genotype)", plantResults.map(p=>({label:`#${p.plant} ${p.geno||""}`, value:p.skew, color:gcol[p.geno||"—"]})), "°", "#1a7f37");
+    // genotype means
+    const byG={}; plantResults.forEach(p=>{ const g=p.geno||"—"; (byG[g]=byG[g]||[]).push(p.skew); });
+    body += barChart("Mean skew by genotype", Object.entries(byG).map(([g,a])=>({label:g, value:a.reduce((s,v)=>s+v,0)/a.length, color:gcol[g]})), "°", "#1a7f37"); }
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AstroRoot report — ${esc(name)}</title><style>
+body{font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;color:#1f2328;max-width:760px;margin:24px auto;padding:0 16px}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:17px;border-bottom:1px solid #d0d7de;padding-bottom:4px;margin-top:26px}
+h3{font-size:13px;color:#59636e;margin:14px 0 4px} .meta{color:#59636e} .cap{font-size:12px;color:#59636e}
+img.trace{max-width:460px;border:1px solid #d0d7de;border-radius:8px;margin:8px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:6px 0} th,td{border:1px solid #d0d7de;padding:5px 8px;text-align:left}
+th{background:#f6f8fa} .tag{background:#9a6700;color:#fff;font-size:11px;border-radius:10px;padding:1px 7px;vertical-align:middle}
+footer{margin-top:28px;color:#8b949e;font-size:12px;border-top:1px solid #d0d7de;padding-top:8px}
+</style></head><body>${body}
+<footer>Generated by <a href="https://dr-richard-barker.github.io/astroroot/">AstroRoot</a> · ${new Date().toISOString().slice(0,10)}</footer>
+</body></html>`;
+}
+function showReportSection(){ if(lastResult) $("reportSection").hidden=false; }
+$("genReport").onclick = () => { const name=(($("imgFile").files[0]?.name)||$("demoImg").value||"image").replace(/\.[^.]+$/,"");
+  download(`astroroot_report_${name}.html`, buildReport(), "text/html"); };
+$("reportPreview").onclick = () => { const b=$("reportPreviewBox");
+  if(b.innerHTML){ b.innerHTML=""; return; }
+  const f=document.createElement("iframe"); f.style="width:100%;height:520px;border:1px solid var(--edge);border-radius:8px;margin-top:8px;background:#fff";
+  b.appendChild(f); f.srcdoc=buildReport(); };
+
 /* demo/test images — NASA ABRS root timelapse (flight + ground) */
 (async function initDemoImages(){
   try{
@@ -272,6 +346,7 @@ $("runBtn").onclick = async () => {
   setTraits(traits);
   measureROIs();
   measurePlants();
+  showReportSection();
   $("methodNote").textContent = ortSession
     ? `Traced with ${ortModelName} (${ortBackend}).` + (ortBackend==="wasm" ? " First run is slow without WebGPU — see docs." : "")
     : "Classical baseline (auto threshold + thinning). Load the Arabidopsis model for accuracy.";
@@ -619,6 +694,10 @@ function drawTrace(c){
     if(traceMode){ pts.forEach((p,i)=>{ c.beginPath(); c.arc(p[0],p[1], i===0?5:3.5, 0,7);
       c.fillStyle = i===0?ORDER_COL(r.order):"#fff"; c.strokeStyle=ORDER_COL(r.order); c.lineWidth=1.5; c.fill(); c.stroke(); }); }
   });
+  if(traceMode && liveWire && liveWire.points.length>=2){       // NeuronJ-style live-wire preview
+    c.strokeStyle="#f0b429"; c.lineWidth=2; c.setLineDash([6,4]); c.beginPath();
+    liveWire.points.forEach((p,i)=> i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke(); c.setLineDash([]);
+  }
   if(traceMode && routeStart){                                   // pending route start
     c.beginPath(); c.arc(routeStart.px,routeStart.py,6,0,7); c.fillStyle="#f0b429"; c.fill();
     c.strokeStyle="#0d1117"; c.lineWidth=1.5; c.stroke();
@@ -750,12 +829,12 @@ function nearestSeg(px,py,thr=9){ let best=null;
     const cx=a[0]+t*dx, cy=a[1]+t*dy, d=Math.hypot(cx-px,cy-py);
     if(d<thr&&(!best||d<best.d)) best={id:r.id,seg:i,cx,cy,d}; } }); return best; }
 
-function traceSetSub(sub){ editSub=sub; activeRoot=null; routeStart=null;
+function traceSetSub(sub){ editSub=sub; activeRoot=null; routeStart=null; liveWire=null;
   $("traceDrawBtn").classList.toggle("primary", sub==="draw");
   $("traceEditBtn").classList.toggle("primary", sub==="edit");
   $("traceRouteBtn").classList.toggle("primary", sub==="route");
   $("traceHint").textContent = sub==="draw" ? "Click to lay nodes; double-click to finish. Start on a root to branch a lateral."
-    : sub==="route" ? "Click a START (a seed, or on a root to branch a lateral), then click the TIP — the path auto-traces along the root."
+    : sub==="route" ? "Click a START (a seed, or on a root for a lateral), then move toward the TIP — the wire snaps along the root live; click to commit. Hold Shift for a straight line."
     : "Drag a node to move · click a segment to insert · shift-click a node to delete · Delete key removes a root."; }
 $("traceToggle").onclick = () => { traceMode=!traceMode;
   if(traceMode){ roiMode=false; seedMode=false; $("roiDraw").classList.remove("primary"); $("seedDraw").classList.remove("primary"); }
@@ -782,7 +861,7 @@ octx.addEventListener("pointerdown", e => {
       activeRoot=editRoots[editRoots.length-1].id; selRoot=activeRoot;
     } else rootById(activeRoot).nodes.push(toNorm(px,py));
     redrawOverlay();
-  } else if(editSub==="route"){ handleRoute(px,py);              // click start, click tip → A* route
+  } else if(editSub==="route"){ handleRoute(px,py,e.shiftKey);   // click start, click tip → A* route (Shift = straight)
   } else {                                                       // edit
     const nd=nearestNode(px,py);
     if(nd){ selRoot=nd.id;
@@ -796,8 +875,20 @@ octx.addEventListener("pointerdown", e => {
     selRoot=null; redrawOverlay();
   }
 });
-octx.addEventListener("pointermove", e => { if(!dragNode) return; const r=octx.getBoundingClientRect();
-  rootById(dragNode.id).nodes[dragNode.ni]=toNorm(e.clientX-r.left, e.clientY-r.top); redrawOverlay(); });
+let liveWire=null;                                          // {points:[[dispx,dispy]...]} preview path
+octx.addEventListener("pointermove", e => {
+  if(dragNode){ const r=octx.getBoundingClientRect();
+    rootById(dragNode.id).nodes[dragNode.ni]=toNorm(e.clientX-r.left, e.clientY-r.top); redrawOverlay(); return; }
+  if(traceMode && editSub==="route" && routeStart && lastResult && lastResult.mask){   // NeuronJ-style live wire
+    const r=octx.getBoundingClientRect(); const px=e.clientX-r.left, py=e.clientY-r.top;
+    if(e.shiftKey){ liveWire={points:[[routeStart.px,routeStart.py],[px,py]]}; redrawOverlay(); return; }  // shift = straight line
+    const now=performance.now(); if(now-_lwLast<45) return; _lwLast=now;                // throttle the A*
+    const g=routeGridCache(); const path=routePath(g,routeStart.px,routeStart.py,px,py,45000);
+    liveWire = path ? {points:path.map(p=>[p[0]/g.gw*octx.width, p[1]/g.gh*octx.height])} : null;
+    redrawOverlay();
+  }
+});
+let _lwLast=0;
 octx.addEventListener("pointerup", () => { if(dragNode){ dragNode=null; computeTraceTraits(); } });
 octx.addEventListener("contextmenu", e => { if(traceMode) e.preventDefault(); });
 octx.addEventListener("dblclick", () => { if(traceMode && editSub==="draw"){
@@ -885,7 +976,7 @@ function snapToRoot(grid,gx,gy,rad){ if(grid.cost[gy*grid.gw+gx]<=1) return [gx,
   let best=null,bd=Infinity; for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){ const nx=gx+dx,ny=gy+dy;
     if(nx<0||ny<0||nx>=grid.gw||ny>=grid.gh)continue; if(grid.cost[ny*grid.gw+nx]<=1){ const d=dx*dx+dy*dy; if(d<bd){bd=d;best=[nx,ny];} } }
   return best||[gx,gy]; }
-function astar(cost,gw,gh,sx,sy,tx,ty){
+function astar(cost,gw,gh,sx,sy,tx,ty,maxExp){
   const N=gw*gh, g=new Float32Array(N).fill(Infinity), came=new Int32Array(N).fill(-1), closed=new Uint8Array(N);
   const h=(x,y)=>Math.hypot(x-tx,y-ty);                          // admissible (min step cost 1)
   const heap=[];                                                 // binary min-heap of [f,idx]
@@ -893,7 +984,8 @@ function astar(cost,gw,gh,sx,sy,tx,ty){
   const pop=()=>{ const top=heap[0], last=heap.pop(); if(heap.length){ heap[0]=last; let c=0; for(;;){ let l=2*c+1,r=2*c+2,m=c;
     if(l<heap.length&&heap[l][0]<heap[m][0])m=l; if(r<heap.length&&heap[r][0]<heap[m][0])m=r; if(m===c)break; [heap[m],heap[c]]=[heap[c],heap[m]]; c=m; } } return top; };
   const si=sy*gw+sx, ti=ty*gw+tx; g[si]=0; push(h(sx,sy),si);
-  while(heap.length){ const [,i]=pop(); if(closed[i])continue; closed[i]=1; if(i===ti)break;
+  const CAP = maxExp||N; let exp=0;
+  while(heap.length){ const [,i]=pop(); if(closed[i])continue; closed[i]=1; if(i===ti)break; if(++exp>CAP) return null;
     const x=i%gw, y=(i/gw)|0;
     for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue; const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=gw||ny>=gh)continue;
       const ni=ny*gw+nx; if(closed[ni])continue; const ng=g[i]+(dx&&dy?1.41421:1)*cost[ni];
@@ -902,17 +994,23 @@ function astar(cost,gw,gh,sx,sy,tx,ty){
   const path=[]; let cur=ti; while(cur>=0){ path.push([cur%gw,(cur/gw)|0]); if(cur===si)break; cur=came[cur]; }
   return path.reverse();
 }
-function handleRoute(px,py){
+let _routeGrid=null, _routeGridFor=null;
+function routeGridCache(){ if(_routeGridFor!==lastResult){ _routeGrid=buildCostGrid(); _routeGridFor=lastResult; } return _routeGrid; }
+function routePath(g, ax, ay, bx, by, cap){                  // A* path (grid coords) between two display points
+  const toG=(x,y)=>[Math.max(0,Math.min(g.gw-1,Math.round(x/octx.width*g.gw))), Math.max(0,Math.min(g.gh-1,Math.round(y/octx.height*g.gh)))];
+  let [sx,sy]=toG(ax,ay), [tx,ty]=toG(bx,by);
+  [sx,sy]=snapToRoot(g,sx,sy,10); [tx,ty]=snapToRoot(g,tx,ty,10);
+  return astar(g.cost, g.gw, g.gh, sx, sy, tx, ty, cap);
+}
+function handleRoute(px, py, shift){                         // click a start then a tip → commit a routed root
   if(!lastResult||!lastResult.mask){ alert("Run Trace roots first so there's a root mask to follow."); return; }
-  if(!routeStart){ routeStart={px,py, seg:nearestSeg(px,py,10)}; redrawOverlay(); return; }
-  const grid=buildCostGrid();
-  const toG=(x,y)=>[Math.max(0,Math.min(grid.gw-1,Math.round(x/octx.width*grid.gw))), Math.max(0,Math.min(grid.gh-1,Math.round(y/octx.height*grid.gh)))];
-  let [sx,sy]=toG(routeStart.px,routeStart.py), [tx,ty]=toG(px,py);
-  [sx,sy]=snapToRoot(grid,sx,sy,10); [tx,ty]=snapToRoot(grid,tx,ty,10);
-  const path=astar(grid.cost,grid.gw,grid.gh,sx,sy,tx,ty);
-  const start=routeStart; routeStart=null;
-  if(!path||path.length<2){ alert("Couldn't route a path — click nearer the root, or use ＋ Root to draw it."); redrawOverlay(); return; }
-  const nodes=downsamplePath(path,18).map(p=>[p[0]/grid.gw, p[1]/grid.gh]);
+  if(!routeStart){ routeStart={px, py, seg:nearestSeg(px,py,10)}; liveWire=null; redrawOverlay(); return; }
+  const start=routeStart; routeStart=null; liveWire=null;
+  let nodes;
+  if(shift){ nodes=[[start.px/octx.width, start.py/octx.height],[px/octx.width, py/octx.height]]; }  // straight-line fallback
+  else { const g=routeGridCache(); const path=routePath(g, start.px, start.py, px, py);
+    if(!path||path.length<2){ alert("Couldn't route — click nearer the root, or hold Shift for a straight line."); redrawOverlay(); return; }
+    nodes=downsamplePath(path,18).map(p=>[p[0]/g.gw, p[1]/g.gh]); }
   if(start.seg){ const parent=rootById(start.seg.id); editRoots.push({id:++rootIdSeq,order:parent.order+1,parent:parent.id,nodes}); }
   else editRoots.push({id:++rootIdSeq,order:1,parent:null,nodes});
   selRoot=editRoots[editRoots.length-1].id; redrawOverlay(); computeTraceTraits();

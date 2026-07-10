@@ -19,7 +19,8 @@ into one page that works on a school Chromebook. Part of the
 |---|---|
 | **Single image** → traced overlay + measurements | ✅ |
 | **Manual trace editor** (RootNav 1-style) — draw roots, drag/insert/delete nodes, branch laterals; measure + RSML from the trace | ✅ full node & branch control; "From auto" seeds it from the model |
-| **Click-two-points auto-routing** — click a start + a tip, A* traces the path along the root mask | ✅ RootNav 1-style; primaries & laterals; ~60 ms |
+| **Live-wire magnetic tracing** (NeuronJ-style) — the path snaps along the root as you move the cursor; click to commit, Shift for a straight line | ✅ live A* preview; primaries & laterals |
+| **Downloadable summary report** — self-contained HTML: measurements, per-region & per-plant figures, traced image | ✅ Preview + download (print to PDF) |
 | **Demo/test images** — NASA ABRS root timelapse (8 full plates + 10 single-root tiles) | ✅ Single picker + Batch "load demo set" |
 | **Plate-grid removal** — deterministic morphological filter, live before/after preview | ✅ "remove plate grid" toggle (Single + Batch) |
 | **Batch** (many images → one CSV) | ✅ |
