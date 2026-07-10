@@ -554,6 +554,10 @@ function drawTrace(c){
     if(traceMode){ pts.forEach((p,i)=>{ c.beginPath(); c.arc(p[0],p[1], i===0?5:3.5, 0,7);
       c.fillStyle = i===0?ORDER_COL(r.order):"#fff"; c.strokeStyle=ORDER_COL(r.order); c.lineWidth=1.5; c.fill(); c.stroke(); }); }
   });
+  if(traceMode && routeStart){                                   // pending route start
+    c.beginPath(); c.arc(routeStart.px,routeStart.py,6,0,7); c.fillStyle="#f0b429"; c.fill();
+    c.strokeStyle="#0d1117"; c.lineWidth=1.5; c.stroke();
+  }
 }
 
 /* ---------- regions of interest (label roots by area, e.g. genotype) ---------- */
@@ -668,7 +672,7 @@ $("plantSaveDb").onclick = async () => {
  * Draw: click to lay nodes; starting on an existing root branches a lateral. Edit: drag a node,
  * click a segment to insert one, shift/right-click a node to delete, Delete removes a root+subtree.
  * Measurements + RSML come from what you actually traced (no dependence on the noisy skeleton). */
-let traceMode=false, editSub="draw", editRoots=[], activeRoot=null, selRoot=null, dragNode=null, rootIdSeq=0;
+let traceMode=false, editSub="draw", editRoots=[], activeRoot=null, selRoot=null, dragNode=null, rootIdSeq=0, routeStart=null;
 const rootById = id => editRoots.find(r=>r.id===id);
 const toNorm = (px,py) => [px/octx.width, py/octx.height];
 const toDisp = n => [n[0]*octx.width, n[1]*octx.height];
@@ -681,10 +685,13 @@ function nearestSeg(px,py,thr=9){ let best=null;
     const cx=a[0]+t*dx, cy=a[1]+t*dy, d=Math.hypot(cx-px,cy-py);
     if(d<thr&&(!best||d<best.d)) best={id:r.id,seg:i,cx,cy,d}; } }); return best; }
 
-function traceSetSub(sub){ editSub=sub; activeRoot=null;
+function traceSetSub(sub){ editSub=sub; activeRoot=null; routeStart=null;
   $("traceDrawBtn").classList.toggle("primary", sub==="draw");
   $("traceEditBtn").classList.toggle("primary", sub==="edit");
-  $("traceHint").textContent = sub==="draw" ? "Click to lay nodes; double-click to finish. Start on a root to branch a lateral." : "Drag a node to move · click a segment to insert · shift-click a node to delete · Delete key removes a root."; }
+  $("traceRouteBtn").classList.toggle("primary", sub==="route");
+  $("traceHint").textContent = sub==="draw" ? "Click to lay nodes; double-click to finish. Start on a root to branch a lateral."
+    : sub==="route" ? "Click a START (a seed, or on a root to branch a lateral), then click the TIP — the path auto-traces along the root."
+    : "Drag a node to move · click a segment to insert · shift-click a node to delete · Delete key removes a root."; }
 $("traceToggle").onclick = () => { traceMode=!traceMode;
   if(traceMode){ roiMode=false; seedMode=false; $("roiDraw").classList.remove("primary"); $("seedDraw").classList.remove("primary"); }
   $("traceToggle").classList.toggle("primary", traceMode); $("traceTools").hidden=!traceMode;
@@ -693,6 +700,7 @@ $("traceToggle").onclick = () => { traceMode=!traceMode;
   redrawOverlay(); };
 $("traceDrawBtn").onclick = () => traceSetSub("draw");
 $("traceEditBtn").onclick = () => traceSetSub("edit");
+$("traceRouteBtn").onclick = () => traceSetSub("route");
 $("traceClear").onclick = () => { editRoots=[]; activeRoot=selRoot=null; redrawOverlay(); };
 
 octx.addEventListener("pointerdown", e => {
@@ -709,6 +717,7 @@ octx.addEventListener("pointerdown", e => {
       activeRoot=editRoots[editRoots.length-1].id; selRoot=activeRoot;
     } else rootById(activeRoot).nodes.push(toNorm(px,py));
     redrawOverlay();
+  } else if(editSub==="route"){ handleRoute(px,py);              // click start, click tip → A* route
   } else {                                                       // edit
     const nd=nearestNode(px,py);
     if(nd){ selRoot=nd.id;
@@ -797,6 +806,52 @@ function skeletonToRoots(skel, pw, ph){                         // split skeleto
 }
 [$("roiDraw"),$("seedDraw")].forEach(b=> b && b.addEventListener("click", ()=>{      // leaving trace editor
   if(traceMode){ traceMode=false; $("traceToggle").classList.remove("primary"); $("traceTools").hidden=true; redrawOverlay(); } }));
+
+/* ---- click-two-points auto-routing (A* along the root mask, RootNav 1-style) ---- */
+function downsamplePath(p,mx){ if(p.length<=mx)return p; const o=[],st=(p.length-1)/(mx-1); for(let i=0;i<mx;i++)o.push(p[Math.round(i*st)]); return o; }
+function buildCostGrid(){                                        // low cost on root, high off it, from the model's mask
+  const {mask,pw,ph}=lastResult, MAXR=420, s=Math.min(1,MAXR/Math.max(pw,ph));
+  const gw=Math.max(1,Math.round(pw*s)), gh=Math.max(1,Math.round(ph*s)), cost=new Float32Array(gw*gh);
+  for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){ const sxp=Math.min(pw-1,(x/s)|0), syp=Math.min(ph-1,(y/s)|0);
+    cost[y*gw+x] = mask[syp*pw+sxp] ? 1 : 28; }                  // background crossable but expensive (bridges gaps)
+  return {cost,gw,gh};
+}
+function snapToRoot(grid,gx,gy,rad){ if(grid.cost[gy*grid.gw+gx]<=1) return [gx,gy];
+  let best=null,bd=Infinity; for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){ const nx=gx+dx,ny=gy+dy;
+    if(nx<0||ny<0||nx>=grid.gw||ny>=grid.gh)continue; if(grid.cost[ny*grid.gw+nx]<=1){ const d=dx*dx+dy*dy; if(d<bd){bd=d;best=[nx,ny];} } }
+  return best||[gx,gy]; }
+function astar(cost,gw,gh,sx,sy,tx,ty){
+  const N=gw*gh, g=new Float32Array(N).fill(Infinity), came=new Int32Array(N).fill(-1), closed=new Uint8Array(N);
+  const h=(x,y)=>Math.hypot(x-tx,y-ty);                          // admissible (min step cost 1)
+  const heap=[];                                                 // binary min-heap of [f,idx]
+  const push=(f,i)=>{ heap.push([f,i]); let c=heap.length-1; while(c>0){ const p=(c-1)>>1; if(heap[p][0]<=heap[c][0])break; [heap[p],heap[c]]=[heap[c],heap[p]]; c=p; } };
+  const pop=()=>{ const top=heap[0], last=heap.pop(); if(heap.length){ heap[0]=last; let c=0; for(;;){ let l=2*c+1,r=2*c+2,m=c;
+    if(l<heap.length&&heap[l][0]<heap[m][0])m=l; if(r<heap.length&&heap[r][0]<heap[m][0])m=r; if(m===c)break; [heap[m],heap[c]]=[heap[c],heap[m]]; c=m; } } return top; };
+  const si=sy*gw+sx, ti=ty*gw+tx; g[si]=0; push(h(sx,sy),si);
+  while(heap.length){ const [,i]=pop(); if(closed[i])continue; closed[i]=1; if(i===ti)break;
+    const x=i%gw, y=(i/gw)|0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy)continue; const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=gw||ny>=gh)continue;
+      const ni=ny*gw+nx; if(closed[ni])continue; const ng=g[i]+(dx&&dy?1.41421:1)*cost[ni];
+      if(ng<g[ni]){ g[ni]=ng; came[ni]=i; push(ng+h(nx,ny),ni); } } }
+  if(came[ti]<0 && ti!==si) return null;
+  const path=[]; let cur=ti; while(cur>=0){ path.push([cur%gw,(cur/gw)|0]); if(cur===si)break; cur=came[cur]; }
+  return path.reverse();
+}
+function handleRoute(px,py){
+  if(!lastResult||!lastResult.mask){ alert("Run Trace roots first so there's a root mask to follow."); return; }
+  if(!routeStart){ routeStart={px,py, seg:nearestSeg(px,py,10)}; redrawOverlay(); return; }
+  const grid=buildCostGrid();
+  const toG=(x,y)=>[Math.max(0,Math.min(grid.gw-1,Math.round(x/octx.width*grid.gw))), Math.max(0,Math.min(grid.gh-1,Math.round(y/octx.height*grid.gh)))];
+  let [sx,sy]=toG(routeStart.px,routeStart.py), [tx,ty]=toG(px,py);
+  [sx,sy]=snapToRoot(grid,sx,sy,10); [tx,ty]=snapToRoot(grid,tx,ty,10);
+  const path=astar(grid.cost,grid.gw,grid.gh,sx,sy,tx,ty);
+  const start=routeStart; routeStart=null;
+  if(!path||path.length<2){ alert("Couldn't route a path — click nearer the root, or use ＋ Root to draw it."); redrawOverlay(); return; }
+  const nodes=downsamplePath(path,18).map(p=>[p[0]/grid.gw, p[1]/grid.gh]);
+  if(start.seg){ const parent=rootById(start.seg.id); editRoots.push({id:++rootIdSeq,order:parent.order+1,parent:parent.id,nodes}); }
+  else editRoots.push({id:++rootIdSeq,order:1,parent:null,nodes});
+  selRoot=editRoots[editRoots.length-1].id; redrawOverlay(); computeTraceTraits();
+}
 function setTraits(t){
   $("tLen").textContent   = t ? t.length : "—";
   $("tTips").textContent  = t ? t.tips : "—";
