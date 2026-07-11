@@ -690,14 +690,26 @@ function redrawOverlay(){
   });
   drawTrace(c);
 }
+let smoothTrace = true;
+function splinePoints(nodes){                                // Catmull-Rom spline through the control nodes
+  if(!smoothTrace || nodes.length<3) return nodes;
+  const P=i=>nodes[Math.max(0,Math.min(nodes.length-1,i))], S=6, out=[];
+  for(let i=0;i<nodes.length-1;i++){ const p0=P(i-1),p1=P(i),p2=P(i+1),p3=P(i+2);
+    for(let s=0;s<S;s++){ const t=s/S,t2=t*t,t3=t2*t;
+      out.push([0.5*(2*p1[0]+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+                0.5*(2*p1[1]+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)]); } }
+  out.push(nodes[nodes.length-1]); return out;
+}
+$("traceSmooth").onclick = () => { smoothTrace=!smoothTrace; $("traceSmooth").classList.toggle("primary", smoothTrace); redrawOverlay(); computeTraceTraits(); };
 const ORDER_COL = o => o<=1?"#f0b429":o===2?"#58a6ff":"#e668a7";     // primary / lateral / higher-order
 function drawTrace(c){
   editRoots.forEach(r=>{
     if(r.nodes.length<1) return;
-    const pts=r.nodes.map(n=>[n[0]*octx.width, n[1]*octx.height]);
-    if(pts.length>=2){ c.strokeStyle=ORDER_COL(r.order); c.lineWidth=(r.id===selRoot?3.5:2); c.lineJoin="round"; c.lineCap="round";
-      c.beginPath(); pts.forEach((p,i)=> i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke(); }
-    if(traceMode){ pts.forEach((p,i)=>{ c.beginPath(); c.arc(p[0],p[1], i===0?5:3.5, 0,7);
+    const ctrl=r.nodes.map(n=>[n[0]*octx.width, n[1]*octx.height]);
+    const line=splinePoints(r.nodes).map(n=>[n[0]*octx.width, n[1]*octx.height]);
+    if(line.length>=2){ c.strokeStyle=ORDER_COL(r.order); c.lineWidth=(r.id===selRoot?3.5:2); c.lineJoin="round"; c.lineCap="round";
+      c.beginPath(); line.forEach((p,i)=> i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.stroke(); }
+    if(traceMode){ ctrl.forEach((p,i)=>{ c.beginPath(); c.arc(p[0],p[1], i===0?5:3.5, 0,7);
       c.fillStyle = i===0?ORDER_COL(r.order):"#fff"; c.strokeStyle=ORDER_COL(r.order); c.lineWidth=1.5; c.fill(); c.stroke(); }); }
   });
   if(traceMode && liveWire && liveWire.points.length>=2){       // NeuronJ-style live-wire preview
@@ -910,7 +922,7 @@ function deleteRoot(id){                                        // remove a root
 
 function traceTraits(){                                         // measure from the vector roots
   const sum=a=>a.reduce((x,y)=>x+y,0);
-  const rootLenPx = r => { let L=0; for(let i=1;i<r.nodes.length;i++){ const dx=(r.nodes[i][0]-r.nodes[i-1][0])*imgW, dy=(r.nodes[i][1]-r.nodes[i-1][1])*imgH; L+=Math.hypot(dx,dy);} return L; };
+  const rootLenPx = r => { const p=splinePoints(r.nodes); let L=0; for(let i=1;i<p.length;i++){ const dx=(p[i][0]-p[i-1][0])*imgW, dy=(p[i][1]-p[i-1][1])*imgH; L+=Math.hypot(dx,dy);} return L; };
   const valid=editRoots.filter(r=>r.nodes.length>=2);
   const lenPx=sum(valid.map(rootLenPx));
   const laterals=valid.filter(r=>r.parent!=null).length;
@@ -940,7 +952,7 @@ $("traceRsmlBtn").onclick = () => download("astroroot_trace.rsml", traceRSML(), 
 function traceRSML(){
   const byId=Object.fromEntries(editRoots.map(r=>[r.id,r]));
   const kids=id=>editRoots.filter(r=>r.parent===id);
-  const node=r=>{ const pts=r.nodes.map(n=>`<point x="${(n[0]*imgW).toFixed(1)}" y="${(n[1]*imgH).toFixed(1)}"/>`).join("");
+  const node=r=>{ const pts=splinePoints(r.nodes).map(n=>`<point x="${(n[0]*imgW).toFixed(1)}" y="${(n[1]*imgH).toFixed(1)}"/>`).join("");
     return `<root ID="r${r.id}"><geometry><polyline>${pts}</polyline></geometry>${kids(r.id).map(node).join("")}</root>`; };
   const roots=editRoots.filter(r=>r.parent==null).map(node).join("");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<rsml><metadata><version>1</version><unit>${pxPerCm?"cm":"pixel"}</unit>`+
@@ -1004,7 +1016,7 @@ function traceDiameters(){                                       // per-node wid
   const {mask,pw,ph}=lastResult, k = (lastResult.scale||1) * (pxPerCm ? 1/pxPerCm : 1);  // processing-px → image-px → cm
   let surf=0, vol=0, diamW=0, lenW=0;
   for(const r of editRoots){ if(r.nodes.length<2) continue;
-    const px=r.nodes.map(n=>[n[0]*pw, n[1]*ph]); const N=px.length; const wid=[];
+    const px=splinePoints(r.nodes).map(n=>[n[0]*pw, n[1]*ph]); const N=px.length; const wid=[];
     for(let i=0;i<N;i++){ const a=px[Math.max(0,i-1)], b=px[Math.min(N-1,i+1)];
       const m=perpProbe(mask,pw,ph, px[i][0],px[i][1], b[0]-a[0], b[1]-a[1]); if(m) wid.push(m.width*k); }
     if(!wid.length) continue;
