@@ -69,6 +69,11 @@ function buildReport(){
   if(e) body += `<h2>Estimated lateral traits <span class="tag">AI estimate</span></h2>`+
     tableHTML(["Est. #laterals","Lateral fraction","Est. lateral angle"],[[`~${e.n_laterals}`, e.lateral_fraction, `~${e.lat_angle}°`]])+
     `<p class="cap">Synthetic-trained estimate — treat as a guide, not an exact count.</p>`;
+  if(editRoots.length && lastTrace){ const tt=lastTrace;
+    body += `<h2>Manual trace</h2>`+tableHTML(["Roots","Total length","Tips","Laterals","Mean skew"],
+      [[tt.count, `${tt.lengthVal} ${tt.lengthUnit}`, tt.tips, tt.branches, `${tt.angle}°`]]);
+    if(tt.meanDiameter!=null) body += tableHTML(["Mean diameter","Total surface","Total volume"],
+      [[`${tt.meanDiameter} ${tt.diaUnit}`, `${tt.surface} ${tt.diaUnit}²`, `${tt.volume} ${tt.diaUnit}³`]]); }
   if(roiResults.length){ body += `<h2>Per region</h2>`+
     tableHTML(["Region","Length","Tips","Branches","Angle°"], roiResults.map(r=>[r.name, `${r.traits.lengthVal.toFixed?r.traits.lengthVal.toFixed(1):r.traits.lengthVal} ${r.traits.lengthUnit}`, r.traits.tips, r.traits.branches, r.traits.angle.toFixed(1)]))+
     barChart("Mean angle by region", roiResults.map(r=>({label:r.name, value:r.traits.angle})), "°", "#0969da"); }
@@ -379,7 +384,8 @@ $("saveDbBtn").onclick = async () => {
   const traits = manual || (lastResult && lastResult.traits);
   if(!traits) return;
   const rec = resultRecord($("imgFile").files[0]?.name || $("demoImg").value, traits);
-  if(manual) rec.engine = "manual trace";
+  if(manual){ rec.engine = "manual trace";
+    if(manual.meanDiameter!=null){ rec.meanDiameter=manual.meanDiameter; rec.surface=manual.surface; rec.volume=manual.volume; } }
   else if(lastResult && lastResult.desc) applyDesc(rec, lastResult.desc);        // PRIMAL descriptors
   rec.thumb = thumbnail();
   await AR_DB.save(rec);
@@ -914,14 +920,17 @@ function traceTraits(){                                         // measure from 
   const skew = prim.length ? sum(prim.map(r=>{ const a=r.nodes[0],b=r.nodes[r.nodes.length-1];
     return Math.atan2((b[0]-a[0])*imgW, Math.max(1,(b[1]-a[1])*imgH))*180/Math.PI; }))/prim.length : 0;
   const lenCm = pxPerCm ? lenPx/pxPerCm : null;
-  return { count:valid.length, lengthVal: lenCm!=null?+lenCm.toFixed(2):Math.round(lenPx), lengthUnit: lenCm!=null?"cm":"px",
+  const out = { count:valid.length, lengthVal: lenCm!=null?+lenCm.toFixed(2):Math.round(lenPx), lengthUnit: lenCm!=null?"cm":"px",
     tips, branches:laterals, angle:+skew.toFixed(1) };
+  const dia = traceDiameters(); if(dia){ out.meanDiameter=dia.meanDiameter; out.surface=dia.surface; out.volume=dia.volume; out.diaUnit=dia.unit; }
+  return out;
 }
 function computeTraceTraits(){
   const t=traceTraits();
   if(!t.count){ setTraits(lastResult?lastResult.traits:null); $("measScope").textContent = lastResult?"(whole image)":""; return; }
   setTraits({length:`${t.lengthVal} ${t.lengthUnit}`, tips:t.tips, branches:t.branches, angle:t.angle});
   $("measScope").textContent=`(manual trace · ${t.count} roots)`;
+  if(t.meanDiameter!=null) $("methodNote").textContent = `Manual trace · ${t.count} roots · mean diameter ${t.meanDiameter} ${t.diaUnit}, surface ${t.surface} ${t.diaUnit}², volume ${t.volume} ${t.diaUnit}³ (from the root mask).`;
   ["csvBtn","rsmlBtn","pngBtn","saveDbBtn"].forEach(b=>$(b).disabled=false);
   lastTrace=t;
 }
@@ -962,6 +971,53 @@ function skeletonToRoots(skel, pw, ph){                         // split skeleto
 }
 [$("roiDraw"),$("seedDraw")].forEach(b=> b && b.addEventListener("click", ()=>{      // leaving trace editor
   if(traceMode){ traceMode=false; $("traceToggle").classList.remove("primary"); $("traceTools").hidden=true; redrawOverlay(); } }));
+
+/* ---- perpendicular cross-section probe: root CENTRE (for refine) + WIDTH (for diameter) ---- */
+function perpProbe(mask, pw, ph, x, y, tx, ty){
+  const on=(a,b)=>a>=0&&b>=0&&a<pw&&b<ph&&mask[b*pw+a];
+  x=Math.round(x); y=Math.round(y);
+  if(!on(x,y)){ let best=null,bd=1e9, R=14; for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){ if(on(x+dx,y+dy)){ const d=dx*dx+dy*dy; if(d<bd){bd=d;best=[x+dx,y+dy];} } }
+    if(!best) return null; x=best[0]; y=best[1]; }
+  const L=Math.hypot(tx,ty)||1, nx=-ty/L, ny=tx/L;              // perpendicular unit
+  const MAXR=Math.max(6, Math.round(Math.min(pw,ph)*0.12));
+  let tp=0; for(let t=1;t<=MAXR;t++){ if(on(Math.round(x+nx*t),Math.round(y+ny*t))) tp=t; else break; }
+  let tm=0; for(let t=1;t<=MAXR;t++){ if(on(Math.round(x-nx*t),Math.round(y-ny*t))) tm=t; else break; }
+  const off=(tp-tm)/2;
+  return { cx:x+nx*off, cy:y+ny*off, width:tp+tm+1 };
+}
+function refineTrace(){                                          // SmartRoot-style: snap nodes onto the centre-line
+  if(!lastResult||!lastResult.mask){ alert("Run Trace roots first so there's a root mask to snap to."); return; }
+  if(!editRoots.length){ alert("Trace or route a root first, then Refine."); return; }
+  const {mask,pw,ph}=lastResult;
+  for(let pass=0; pass<2; pass++) for(const r of editRoots){
+    const N=r.nodes.length, px=r.nodes.map(n=>[n[0]*pw, n[1]*ph]);
+    r.nodes = px.map((p,i)=>{ const a=px[Math.max(0,i-1)], b=px[Math.min(N-1,i+1)];
+      const m=perpProbe(mask,pw,ph, p[0],p[1], b[0]-a[0], b[1]-a[1]);
+      return m ? [m.cx/pw, m.cy/ph] : [p[0]/pw, p[1]/ph]; });
+  }
+  redrawOverlay(); computeTraceTraits();
+  $("traceHint").textContent = "Refined onto the root centre-line — root widths measured (see diameter / surface / volume).";
+}
+$("traceRefine").onclick = refineTrace;
+function traceDiameters(){                                       // per-node width along each root → mean diam, surface, volume
+  if(!lastResult||!lastResult.mask) return null;
+  const {mask,pw,ph}=lastResult, k = (lastResult.scale||1) * (pxPerCm ? 1/pxPerCm : 1);  // processing-px → image-px → cm
+  let surf=0, vol=0, diamW=0, lenW=0;
+  for(const r of editRoots){ if(r.nodes.length<2) continue;
+    const px=r.nodes.map(n=>[n[0]*pw, n[1]*ph]); const N=px.length; const wid=[];
+    for(let i=0;i<N;i++){ const a=px[Math.max(0,i-1)], b=px[Math.min(N-1,i+1)];
+      const m=perpProbe(mask,pw,ph, px[i][0],px[i][1], b[0]-a[0], b[1]-a[1]); if(m) wid.push(m.width*k); }
+    if(!wid.length) continue;
+    for(let i=1;i<N;i++){ const dx=(px[i][0]-px[i-1][0])*k, dy=(px[i][1]-px[i-1][1])*k, sl=Math.hypot(dx,dy);
+      const dm=((wid[Math.min(i,wid.length-1)]||wid[0])+(wid[Math.min(i-1,wid.length-1)]||wid[0]))/2;
+      surf+=Math.PI*dm*sl; vol+=Math.PI*(dm/2)*(dm/2)*sl; }
+    const mrd=wid.reduce((s,v)=>s+v,0)/wid.length, rl=(function(){let L=0;for(let i=1;i<N;i++)L+=Math.hypot((px[i][0]-px[i-1][0])*k,(px[i][1]-px[i-1][1])*k);return L;})();
+    diamW+=mrd*rl; lenW+=rl;
+  }
+  if(lenW<=0) return null;
+  const u = pxPerCm ? "cm" : "px";
+  return { meanDiameter:+(diamW/lenW).toFixed(pxPerCm?3:1), surface:+surf.toFixed(pxPerCm?2:0), volume:+vol.toFixed(pxPerCm?3:0), unit:u };
+}
 
 /* ---- click-two-points auto-routing (A* along the root mask, RootNav 1-style) ---- */
 function downsamplePath(p,mx){ if(p.length<=mx)return p; const o=[],st=(p.length-1)/(mx-1); for(let i=0;i<mx;i++)o.push(p[Math.round(i*st)]); return o; }
