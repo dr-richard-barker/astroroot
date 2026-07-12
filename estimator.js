@@ -18,10 +18,12 @@ const AR_EST = (() => {
     mean/=p.length;
     return [...p.slice(0,30), desc.widthDepthRatio, desc.comX, desc.comY, desc.solidity, max, mean, ai/p.length];
   }
+  const OOD_THRESHOLD = 2.6;                                  // RMS of standardized features; in-distribution ≈ 1
   function predict(desc){
     if(!model) return null;
     const f = featureVec(desc); if(!f) return null;
     let x = f.map((v,i)=>(v - model.featMean[i]) / (model.featStd[i] || 1));
+    let ss=0; for(const z of x) ss+=z*z; const ood = Math.sqrt(ss / x.length);   // how far from the training set
     for(const L of model.layers){
       const out = new Array(L.b.length);
       for(let o=0;o<L.b.length;o++){ let s=L.b[o]; const w=L.W[o]; for(let i=0;i<x.length;i++) s+=w[i]*x[i];
@@ -29,8 +31,12 @@ const AR_EST = (() => {
       x = out;
     }
     const y = x.map((v,i)=>v*model.targetStd[i] + model.targetMean[i]);
-    return { n_laterals: Math.max(0, Math.round(y[0])), lat_angle: +y[1].toFixed(1),
-             lateral_fraction: +Math.min(1, Math.max(0, y[2])).toFixed(3) };
+    // The model extrapolated past a physically-possible value → the input is out of its range.
+    const extrapolated = y[1] < -5 || y[1] > 95 || y[2] < -0.05 || y[2] > 1.05 || y[0] < -1;
+    return { n_laterals: Math.max(0, Math.round(y[0])),
+             lat_angle: +Math.max(0, Math.min(90, y[1])).toFixed(1),          // clamp to a valid root angle
+             lateral_fraction: +Math.min(1, Math.max(0, y[2])).toFixed(3),
+             reliable: ood < OOD_THRESHOLD && !extrapolated, ood: +ood.toFixed(2) };
   }
   return { load, predict, featureVec, ready: ()=>!!model };
 })();

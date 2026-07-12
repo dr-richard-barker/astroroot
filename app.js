@@ -66,9 +66,10 @@ function buildReport(){
     [[t.length, t.tips, t.branches, `${t.angle.toFixed(1)}°`]]);
   if(d) body += depthProfileSVG(d.depthProfile) + tableHTML(["Depth","Width:Depth","Mass-depth","Directionality","Solidity","Convex hull"],
     [[`${d.depth} ${d.unit}`, d.widthDepthRatio, d.comY, d.directionality, d.solidity, d.convexHull]]);
-  if(e) body += `<h2>Estimated lateral traits <span class="tag">AI estimate</span></h2>`+
+  if(e && e.reliable) body += `<h2>Estimated lateral traits <span class="tag">AI estimate</span></h2>`+
     tableHTML(["Est. #laterals","Lateral fraction","Est. lateral angle"],[[`~${e.n_laterals}`, e.lateral_fraction, `~${e.lat_angle}°`]])+
     `<p class="cap">Synthetic-trained estimate — treat as a guide, not an exact count.</p>`;
+  else if(e) body += `<h2>Estimated lateral traits</h2><p class="cap">Not shown — this image is outside the estimator's training range (e.g. a crowded or gridded plate). Use a single-root crop for a usable estimate.</p>`;
   if(editRoots.length && lastTrace){ const tt=lastTrace;
     body += `<h2>Manual trace</h2>`+tableHTML(["Roots","Total length","Tips","Laterals","Mean skew"],
       [[tt.count, `${tt.lengthVal} ${tt.lengthUnit}`, tt.tips, tt.branches, `${tt.angle}°`]]);
@@ -359,7 +360,9 @@ $("runBtn").onclick = async () => {
     $("methodNote").textContent += ` · Descriptors: depth ${d.depth} ${d.unit}, W:D ${d.widthDepthRatio}, mass-depth ${d.comY}, directionality ${d.directionality}, solidity ${d.solidity}.`;
     lastResult.est = AR_EST.predict(d);                     // ML estimate of hidden lateral traits
     if(lastResult.est){ const e=lastResult.est;
-      $("methodNote").textContent += ` · ML estimate: ~${e.n_laterals} laterals, lateral fraction ${e.lateral_fraction}, angle ~${e.lat_angle}° (synthetic-trained — treat as an estimate).`; }
+      $("methodNote").textContent += e.reliable
+        ? ` · ML estimate: ~${e.n_laterals} laterals, lateral fraction ${e.lateral_fraction}, angle ~${e.lat_angle}° (synthetic-trained — treat as an estimate).`
+        : ` · ML estimate: unreliable — this image is far outside the model's training range (a crowded/gridded plate). Try a single-root crop, or remove the plate grid, for a usable estimate.`; }
   }
   ["csvBtn","rsmlBtn","pngBtn","saveDbBtn"].forEach(b => $(b).disabled = false);
   $("editRow").hidden = false;
@@ -662,7 +665,7 @@ function applyDesc(rec, d){                                          // merge de
   if(!d) return; for(const k of ["width","depth","widthDepthRatio","convexHull","comY","comX","directionality","meanDiameter","solidity"]) rec[k]=d[k];
   rec.depthProfile = d.depthProfile;
   const e = (typeof AR_EST!=="undefined") ? AR_EST.predict(d) : null;   // ML hidden-trait estimate
-  if(e){ rec.est_n_laterals=e.n_laterals; rec.est_lat_angle=e.lat_angle; rec.est_lateral_fraction=e.lateral_fraction; }
+  if(e && e.reliable){ rec.est_n_laterals=e.n_laterals; rec.est_lat_angle=e.lat_angle; rec.est_lateral_fraction=e.lateral_fraction; }
 }
 
 /* ---------- draw + results ---------- */
