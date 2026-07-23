@@ -1,0 +1,65 @@
+{
+  "source": "AstroRoot synthetic demo roots (gen_synthetic_root.py)",
+  "note": "Clean, high-contrast synthetic roots with an EXACT known answer \u2014 for a first run, teaching, and smoke-testing. Drawn at 100 px/cm with a 2 cm scale bar; calibrate with 'Manual \u2014 click 2 points' on the bar (enter 20 mm).",
+  "px_per_cm": 100,
+  "files": [
+    {
+      "file": "synthetic_straight_root.png",
+      "label": "\u25b8 Synthetic: straight root (known answer)",
+      "synthetic": true,
+      "px_per_cm": 100,
+      "calibrate_on": "primary ends = 100 mm",
+      "px": [
+        700,
+        1120
+      ],
+      "truth": {
+        "total_length_cm": 10.0,
+        "tips_growing": 1,
+        "endpoints": 2,
+        "branch_points": 0,
+        "angle_deg": 0
+      },
+      "note": "One vertical primary, 10.00 cm at 100 px/cm. Endpoints=2 (1 growing tip + seed end). Calibrate: Manual 2-pt on the two ends, enter 100 mm."
+    },
+    {
+      "file": "synthetic_fishbone.png",
+      "label": "\u25b8 Synthetic: fishbone (6 laterals, known answer)",
+      "synthetic": true,
+      "px_per_cm": 100,
+      "calibrate_on": "primary ends = 80 mm",
+      "px": [
+        1000,
+        1100
+      ],
+      "truth": {
+        "total_length_cm": 20.0,
+        "tips_growing": 7,
+        "endpoints": 8,
+        "branch_points": 6,
+        "angle_deg": 0,
+        "laterals": 6,
+        "lateral_length_cm": 2.0,
+        "primary_length_cm": 8.0
+      },
+      "note": "Vertical primary 8.00 cm + 6 laterals x 2.00 cm = 20.00 cm total. 6 T-junctions => 6 branch points. Endpoints=8 (7 growing tips + seed end). Calibrate: Manual 2-pt on the primary's ends, enter 80 mm."
+    },
+    {
+      "file": "synthetic_fishbone.rsml",
+      "label": "Synthetic fishbone \u2014 RSML (archiDART traits, known answer)",
+      "synthetic": true,
+      "kind": "rsml",
+      "px_per_cm": 100,
+      "truth": {
+        "TRL_cm": 20.0,
+        "L1R_cm": 8.0,
+        "TN1R": 1,
+        "TNLR_laterals": 6,
+        "magnitude_tips": 6,
+        "max_order": 2,
+        "angle_deg": 0
+      },
+      "note": "Same geometry as synthetic_fishbone.png, as RSML. TRL=20.00 cm, 1 primary + 6 laterals. Load via Dashboard sample picker or 'Import RSML'."
+    }
+  ]
+}

@@ -107,14 +107,23 @@ $("reportPreview").onclick = () => { const b=$("reportPreviewBox");
   const f=document.createElement("iframe"); f.style="width:100%;height:520px;border:1px solid var(--edge);border-radius:8px;margin-top:8px;background:#fff";
   b.appendChild(f); f.srcdoc=buildReport(); };
 
-/* demo/test images — NASA ABRS root timelapse (flight + ground) */
+/* demo/test images — clean synthetic roots (known answer) first, then the NASA ABRS timelapse.
+ * Option values carry a path; a bare filename resolves under samples/images/ (back-compat). */
 (async function initDemoImages(){
+  const sel = $("demoImg");
+  try{
+    const syn = await (await fetch("samples/synthetic/index.json", {cache:"no-cache"})).json();
+    const g = document.createElement("optgroup"); g.label = "Synthetic — clean, known answer";
+    syn.files.filter(f => f.kind !== "rsml").forEach(f => g.appendChild(new Option(f.label, "samples/synthetic/"+f.file)));
+    if(g.children.length) sel.add(g);
+  }catch(e){ /* synthetic set not served — skip */ }
   try{
     const idx = await (await fetch("samples/images/index.json", {cache:"no-cache"})).json();
-    const sel = $("demoImg");
-    idx.files.forEach(f => sel.add(new Option(f.label, f.file)));
-    sel.onchange = () => $("loadDemo").disabled = !sel.value;
+    const g = document.createElement("optgroup"); g.label = "NASA ABRS timelapse (real plates)";
+    idx.files.forEach(f => g.appendChild(new Option(f.label, f.file)));
+    sel.add(g);
   }catch(e){ /* offline or not served — leave the picker empty */ }
+  sel.onchange = () => $("loadDemo").disabled = !sel.value;
 })();
 async function fetchAsFile(path){
   const blob = await (await fetch(path)).blob();
@@ -122,8 +131,9 @@ async function fetchAsFile(path){
 }
 $("loadDemo").onclick = async () => {
   const f = $("demoImg").value; if(!f) return;
+  const path = f.includes("/") ? f : `samples/images/${encodeURIComponent(f)}`;   // bare name = ABRS set
   $("loadDemo").textContent = "loading…";
-  try{ loadImage(await fetchAsFile(`samples/images/${encodeURIComponent(f)}`)); }
+  try{ loadImage(await fetchAsFile(path)); }
   catch(e){ alert("Could not load demo image: " + e.message); }
   $("loadDemo").textContent = "Load";
 };
