@@ -275,7 +275,13 @@ $("clearDb").onclick = async ()=>{ if(confirm("Delete ALL saved measurements fro
 const STEREOTYPES = ["tap_dominant","herringbone","dichotomous","shallow_spreading","fibrous_monocot"];
 $("loadSamples").onclick = async ()=>{
   try{
-    if($("sampleSet").value === "skew"){
+    if($("sampleSet").value === "synthetic"){
+      const rec = AR_RSML.parse(await (await fetch("samples/synthetic/synthetic_fishbone.rsml")).text(), "synthetic_fishbone.rsml");
+      if(!rec){ alert("Could not parse the synthetic RSML."); return; }
+      rec.id = "sample_synthetic_fishbone";
+      await AR_DB.saveMany([rec]);
+      alert("Loaded the synthetic fishbone (known answer): TRL 20.00 cm, 1 primary + 6 laterals. Open its detail to check the archiDART-style traits.");
+    } else if($("sampleSet").value === "skew"){
       const obj = await (await fetch("samples/18_way_skew.json")).json();
       const n = await AR_DB.saveMany(obj.records);
       alert(`Loaded ${n} records (18-way skew, RootNav RSML).`);

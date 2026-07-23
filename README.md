@@ -59,6 +59,22 @@ python -m http.server 8777        # then open http://localhost:8777
 
 Or host the folder on GitHub Pages.
 
+## New here? Start with the tutorial
+
+[**`docs/TUTORIAL.md`**](docs/TUTORIAL.md) is a hands-on, task-by-task walkthrough of every feature
+and workflow. It starts with the bundled **synthetic demo roots** — a clean, high-contrast shape
+drawn at a known scale (100 px/cm) so the numbers the app reports can be checked against an **exact
+known answer**, unlike the real (deliberately diverse) NASA/ABRS plates:
+
+- `samples/synthetic/synthetic_straight_root.png` — one vertical primary, **10.00 cm**.
+- `samples/synthetic/synthetic_fishbone.png` — primary + 6 laterals, **20.00 cm**, **6 branch points**
+  (measures to 1987 px / 8 tips / 6 branches with the classical engine — within ~1 %).
+- `samples/synthetic/synthetic_fishbone.rsml` — the same fishbone as RSML (TRL 20.00 cm) for the
+  archiDART-style trait engine.
+
+They're picked from the **Synthetic — clean, known answer** group in the Single-tab demo picker (and
+the Dashboard sample picker), and regenerated with [`scripts/gen_synthetic_root.py`](scripts/gen_synthetic_root.py).
+
 ## How it works
 
 ```
@@ -88,6 +104,9 @@ photo ──► calibrate (marker) ──► segment ──► thin (skeleton) �
 | `samples/18_way_skew.json` | bundled sample dataset (53 RootNav skew plates) |
 | `samples/stereotypes/*.rsml` | 5 extreme-stereotype architectures (archidart-style demo) |
 | `samples/tictoc/*.rsml` | 24 TICTOC cotton root systems (Flight vs Ground, day 6) |
+| `samples/synthetic/*` | clean synthetic demo roots with an **exact known answer** — straight root + fishbone (PNG) and a matching RSML; `index.json` carries the ground truth |
+| `scripts/gen_synthetic_root.py` | generator for the synthetic examples (Pillow) |
+| `docs/TUTORIAL.md` | hands-on, task-by-task tutorial for every feature/workflow |
 | `samples/images/*.jpg` | 8 NASA ABRS timelapse demo images + `tiles/` (10 single-root crops) + `apex03/` (12 APEX-03 plates: Col-0/WS/spr1/sku5, FL vs GC) |
 | `scripts/grid_remove.py` | reference impl of the grid filter (developed on the ABRS data) |
 | `docs/ARCHIDART_PARITY.md` | honest map of archiDART trait coverage |
