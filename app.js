@@ -127,8 +127,19 @@ $("reportPreview").onclick = () => { const b=$("reportPreviewBox");
 })();
 async function fetchAsFile(path){
   const blob = await (await fetch(path)).blob();
-  return new File([blob], path.split("/").pop(), {type: blob.type || "image/jpeg"});
+  return new File([blob], (path.split("?")[0].split("/").pop()) || "image.jpg", {type: blob.type || "image/jpeg"});
 }
+
+// Auto-load an image handed off via ?image=<url> — e.g. "Open in AstroRoot" from
+// the AstroBotany Calibration Image Database. The URL must be CORS-readable
+// (Epicollect5 media and raw.githubusercontent.com both are) so fetchAsFile can
+// download it into a local File for a taint-free canvas.
+(async () => {
+  const src = new URLSearchParams(location.search).get("image");
+  if (!src) return;
+  try { loadImage(await fetchAsFile(decodeURIComponent(src))); }
+  catch (e) { console.warn("Could not load ?image=", e); }
+})();
 $("loadDemo").onclick = async () => {
   const f = $("demoImg").value; if(!f) return;
   const path = f.includes("/") ? f : `samples/images/${encodeURIComponent(f)}`;   // bare name = ABRS set
