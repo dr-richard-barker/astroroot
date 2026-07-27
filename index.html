@@ -21,7 +21,7 @@
   if (new URLSearchParams(location.search).get('embed') === '1') {
     document.documentElement.classList.add('cose-embed');
     var s = document.createElement('style');
-    s.textContent = 'body>header,.topbar,.sitebar,.map-scrim,.cose-theme-btn,.map-toggle,.cose-brand{display:none!important} body{margin:0!important;padding-top:0!important}';
+    s.textContent = '.page>header,body>header,.topbar,.sitebar,.map-scrim,.cose-theme-btn,.map-toggle,.cose-brand{display:none!important} body{margin:0!important;padding-top:0!important}';
     document.head.appendChild(s);
   }
 </script>
