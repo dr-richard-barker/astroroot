@@ -350,5 +350,52 @@ function initCloud(){
   $("sbForget").onclick = () => { AR_CLOUD.clearConfig(); $("sbUrl").value=""; $("sbKey").value=""; cloudState(); status("keys removed from this browser"); };
 }
 
+/* ---------- deep-link RSML import: dashboard.html?rsml=<index.json url> ----------
+ * A partner site (e.g. the AstroBotany calibration database) can hand off a whole
+ * RSML dataset by URL. The index.json lists files with absolute raw URLs, plus
+ * pre-set group/name labels; each trace is fetched (CORS-open on raw.github),
+ * parsed with AR_RSML, and upserted by a stable id (safe to re-open the link). */
+async function importRsmlIndex(url){
+  const banner = document.createElement("div");
+  banner.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9999;padding:9px 14px;background:#3b6ea5;color:#fff;font:13px/1.4 system-ui,sans-serif;text-align:center";
+  banner.textContent = "Loading RSML dataset…";
+  document.body.appendChild(banner);
+  try{
+    const idx = await (await fetch(url, {cache:"no-cache"})).json();
+    const files = Array.isArray(idx.files) ? idx.files : [];
+    const base = idx.base || "";
+    let done=0, ok=0, skipped=0; const recs=[];
+    const N=8; let i=0;
+    async function worker(){
+      while(i < files.length){
+        const f = files[i++];
+        const furl = f.url || (base + (f.file || ""));
+        try{
+          const text = await (await fetch(furl, {cache:"no-cache"})).text();
+          const rec = AR_RSML.parse(text, f.file || f.name || "rsml");
+          if(rec){
+            rec.id = "rsml_" + String(f.file || f.name || furl).replace(/\W+/g,"_");
+            if(f.group) rec.group = f.group;
+            if(f.name) rec.name = f.name;
+            recs.push(rec); ok++;
+          } else skipped++;
+        }catch(e){ skipped++; }
+        if(++done % 20 === 0) banner.textContent = `Loading RSML dataset… ${done}/${files.length}`;
+      }
+    }
+    await Promise.all(Array.from({length:N}, worker));
+    if(recs.length) await AR_DB.saveMany(recs);
+    banner.textContent = `Imported ${ok} RSML trace(s)` + (skipped?`, skipped ${skipped} (no roots)`:"") + ` from ${idx.name || "dataset"}.`;
+    banner.style.background = "#2f7d63";
+    setTimeout(()=>banner.remove(), 5000);
+  }catch(e){
+    banner.textContent = "Could not load RSML dataset: " + (e.message||e);
+    banner.style.background = "#c0392b";
+    setTimeout(()=>banner.remove(), 7000);
+  }
+}
+
+const RSML_INDEX = new URLSearchParams(location.search).get("rsml");
 initCloud();
-load();
+if(RSML_INDEX) importRsmlIndex(RSML_INDEX).then(()=>load());
+else load();
