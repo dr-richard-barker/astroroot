@@ -293,6 +293,9 @@ $("loadSamples").onclick = async ()=>{
       }
       await AR_DB.saveMany(recs);
       alert(`Loaded ${recs.length} extreme-stereotype architectures (archidart-style traits).`);
+    } else if($("sampleSet").value === "astrobotany"){
+      // Every RSML dataset in the AstroBotany calibration database, in one go.
+      await importRsmlIndex("https://raw.githubusercontent.com/dr-richard-barker/image-analysis-software-and-R-codes/master/all_rsml_index.json");
     } else {
       const idx = await (await fetch("samples/tictoc/index.json")).json();
       const recs=[];
