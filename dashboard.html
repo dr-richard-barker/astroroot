@@ -4,12 +4,24 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AstroRoot — Dashboard</title>
+<script>
+  (function() {
+    let theme = localStorage.getItem('cose_theme');
+    if (!theme) {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header>
-  <h1>📊 AstroRoot Dashboard</h1>
-  <p class="tag">Your saved root measurements — on this device. <a href="index.html">← back to the tool</a></p>
+<header style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+  <div>
+    <h1>📊 AstroRoot Dashboard</h1>
+    <p class="tag">Your saved root measurements — on this device. <a href="index.html">← back to the tool</a></p>
+  </div>
+  <button onclick="toggleTheme()" id="themeToggleBtn" style="padding: 8px 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid var(--edge); background: var(--panel); color: var(--ink); font-weight: 600;" title="Toggle Theme">🌓</button>
 </header>
 
 <main>
@@ -130,5 +142,27 @@
 <script src="cloud.js"></script>
 <script src="rsml.js"></script>
 <script src="dashboard.js"></script>
+<script>
+  function toggleTheme() {
+    const htmlEl = document.documentElement;
+    const currentTheme = htmlEl.getAttribute('data-theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    htmlEl.setAttribute('data-theme', newTheme);
+    localStorage.setItem('cose_theme', newTheme);
+    
+    document.getElementById('themeToggleBtn').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+  }
+
+  function initThemeIcon() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) {
+      btn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+    }
+  }
+  
+  initThemeIcon();
+</script>
 </body>
 </html>

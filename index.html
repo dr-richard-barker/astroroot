@@ -4,14 +4,26 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AstroRoot — root image analysis for the classroom</title>
+<script>
+  (function() {
+    let theme = localStorage.getItem('cose_theme');
+    if (!theme) {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
 <!-- ONNX Runtime Web (loaded lazily; the app works without it via the classical baseline).
      If offline, drop onnxruntime-web's dist files into ./vendor and point ORT_SRC there. -->
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<header>
-  <h1>🛰️ AstroRoot</h1>
-  <p class="tag">Turn a photo of seedling roots into numbers — in your browser, nothing uploaded.</p>
+<header style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+  <div>
+    <h1>🛰️ AstroRoot</h1>
+    <p class="tag">Turn a photo of seedling roots into numbers — in your browser, nothing uploaded.</p>
+  </div>
+  <button onclick="toggleTheme()" id="themeToggleBtn" style="padding: 8px 12px; border-radius: 8px; font-size: 14px; cursor: pointer; border: 1px solid var(--edge); background: var(--panel); color: var(--ink); font-weight: 600;" title="Toggle Theme">🌓</button>
 </header>
 
 <nav class="tabs" role="tablist">
@@ -271,5 +283,27 @@
 <script src="db.js"></script>
 <script src="estimator.js"></script>
 <script src="app.js"></script>
+<script>
+  function toggleTheme() {
+    const htmlEl = document.documentElement;
+    const currentTheme = htmlEl.getAttribute('data-theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    htmlEl.setAttribute('data-theme', newTheme);
+    localStorage.setItem('cose_theme', newTheme);
+    
+    document.getElementById('themeToggleBtn').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+  }
+
+  function initThemeIcon() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) {
+      btn.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+    }
+  }
+  
+  initThemeIcon();
+</script>
 </body>
 </html>
