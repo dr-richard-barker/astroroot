@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AstroRoot — Dashboard</title>
 <link rel="stylesheet" href="style.css" />
+<script>
+  /* Embedded inside the AstroBotany database (?embed=1): hide this page's
+     own chrome (header, toolbar, cloud-sync panel, footer) so it blends in. */
+  if (new URLSearchParams(location.search).get('embed') === '1') {
+    document.documentElement.classList.add('cose-embed');
+    var s = document.createElement('style');
+    s.textContent = 'header,footer,#mainToolbar,#cloudPanel{display:none!important} body{margin:0!important;padding-top:0!important}';
+    document.head.appendChild(s);
+  }
+</script>
 </head>
 <body>
 <header>
@@ -13,7 +23,7 @@
 </header>
 
 <main>
-  <div class="btnrow" style="margin-bottom:14px">
+  <div class="btnrow" id="mainToolbar" style="margin-bottom:14px">
     <input type="search" id="search" placeholder="filter by name / engine / marker…" style="min-width:220px" />
     <select id="sampleSet" title="Bundled demo datasets">
       <option value="synthetic">Synthetic fishbone (1, known answer)</option>
