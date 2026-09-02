@@ -125,3 +125,13 @@ Nottingham — **[RootNav 1](https://www.plant-image-analysis.org/software/rootn
 al. 2013) and **[RootNav 2.0](https://github.com/robail-yasrab/RootNav-2.0)** (Yasrab et al.
 2019). See [`NOTICE`](NOTICE). Model weights carry their upstream licence — check before
 redistributing.
+
+**Other prior art, considered and not integrated.** The "Refine to centre-line" tool (above)
+borrows **[SmartRoot](https://github.com/SmartRoot/smartroot)**'s centre-line-snapping idea —
+SmartRoot itself is a Java/ImageJ plugin (GPL-3.0, dormant since 2019), so its code isn't reused,
+just the method. **[ImJoy](https://github.com/imjoy-team/ImJoy)** (a browser-native plugin
+platform for bioimage analysis) was evaluated as a possible extensibility layer; its core repo is
+largely inactive (the underlying tech has since moved to the separate
+[Hypha/BioEngine](https://github.com/bioimage-io/BioEngine) project) and it has no existing
+root-phenotyping plugins, so adopting it would mean building a new plugin shell around AstroRoot
+for no immediate gain — not pursued for now.
