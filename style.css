@@ -33,6 +33,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .canvaswrap{position:relative;background:var(--panel);border:1px solid var(--edge);border-radius:12px;overflow:auto;min-height:280px}
 .canvaswrap.small{min-height:220px}
 .canvaswrap canvas{display:block;max-width:100%}
+.canvaswrap.dragover{outline:2px dashed var(--accent2);outline-offset:-2px;background:color-mix(in srgb, var(--accent2) 10%, var(--panel))}
+.quickstart{position:relative;background:var(--panel);border:1px solid var(--edge);border-left:4px solid var(--accent2);border-radius:10px;padding:10px 34px 10px 14px;margin-bottom:14px;font-size:13px;color:var(--muted)}
+.quickstart b{color:var(--ink)}
+.qsclose{position:absolute;top:6px;right:6px;padding:2px 7px;border:0;background:transparent;color:var(--muted);font-size:13px}
+.qsclose:hover{color:var(--ink)}
 #overlay,#lblOverlay{position:absolute;top:0;left:0}
 .results{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:14px}
 .results h3{margin:0 0 10px}

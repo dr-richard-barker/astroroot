@@ -25,6 +25,27 @@ let ortSession = null, ortModelName = null, ortBackend = null;
 
 $("imgFile").onchange = e => loadImage(e.target.files[0]);
 
+/* ---------- quick-start banner (first-time users) ---------- */
+const QS_KEY = "astroroot_qs_dismissed";
+if(!localStorage.getItem(QS_KEY)) $("quickStart").hidden = false;
+$("qsClose").onclick = () => { localStorage.setItem(QS_KEY, "1"); $("quickStart").hidden = true; };
+
+/* ---------- drag-and-drop / paste an image straight onto the canvas ---------- */
+const stageWrap = document.querySelector("#single .canvaswrap");
+["dragenter","dragover"].forEach(ev => stageWrap.addEventListener(ev, e => {
+  e.preventDefault(); stageWrap.classList.add("dragover"); }));
+["dragleave","drop"].forEach(ev => stageWrap.addEventListener(ev, () => stageWrap.classList.remove("dragover")));
+stageWrap.addEventListener("drop", e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if(f && f.type.startsWith("image/")) loadImage(f);
+});
+window.addEventListener("paste", e => {
+  if(!$("single").classList.contains("active")) return;                 // only on the Single-image tab
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+  if(item) loadImage(item.getAsFile());
+});
+
 AR_EST.load();                                              // load the ML lateral-trait estimator
 
 /* ================= DOWNLOADABLE SUMMARY REPORT ================= */
@@ -906,15 +927,16 @@ function traceSetSub(sub){ editSub=sub; activeRoot=null; routeStart=null; liveWi
   $("traceDrawBtn").classList.toggle("primary", sub==="draw");
   $("traceEditBtn").classList.toggle("primary", sub==="edit");
   $("traceRouteBtn").classList.toggle("primary", sub==="route");
-  $("traceHint").textContent = sub==="draw" ? "Click to lay nodes; double-click to finish. Start on a root to branch a lateral."
-    : sub==="route" ? "Click a START (a seed, or on a root for a lateral), then move toward the TIP — the wire snaps along the root live; click to commit. Hold Shift for a straight line."
-    : "Drag a node to move · click a segment to insert · shift-click a node to delete · Delete key removes a root."; }
-$("traceToggle").onclick = () => { traceMode=!traceMode;
+  $("traceHint").textContent = sub==="draw" ? "Click to lay nodes; double-click to finish. Start on a root to branch a lateral. (Esc to exit)"
+    : sub==="route" ? "Click a START (a seed, or on a root for a lateral), then move toward the TIP — the wire snaps along the root live; click to commit. Hold Shift for a straight line. (Esc to exit)"
+    : "Drag a node to move · click a segment to insert · shift-click a node to delete · Delete key removes a root. (Esc to exit)"; }
+function setTraceMode(on){ traceMode=on;
   if(traceMode){ roiMode=false; seedMode=false; $("roiDraw").classList.remove("primary"); $("seedDraw").classList.remove("primary"); }
   $("traceToggle").classList.toggle("primary", traceMode); $("traceTools").hidden=!traceMode;
   octx.style.cursor = traceMode ? "crosshair" : "default";
   if(traceMode) traceSetSub("draw"); else $("traceHint").textContent="Hand-trace roots: click to lay nodes, drag to adjust; start on an existing root to branch a lateral.";
-  redrawOverlay(); };
+  redrawOverlay(); }
+$("traceToggle").onclick = () => setTraceMode(!traceMode);
 $("traceDrawBtn").onclick = () => traceSetSub("draw");
 $("traceEditBtn").onclick = () => traceSetSub("edit");
 $("traceRouteBtn").onclick = () => traceSetSub("route");
@@ -967,8 +989,12 @@ octx.addEventListener("contextmenu", e => { if(traceMode) e.preventDefault(); })
 octx.addEventListener("dblclick", () => { if(traceMode && editSub==="draw"){
   if(activeRoot!==null && rootById(activeRoot).nodes.length<2) deleteRoot(activeRoot);
   activeRoot=null; redrawOverlay(); computeTraceTraits(); } });
-window.addEventListener("keydown", e => { if(traceMode && (e.key==="Delete"||e.key==="Backspace") && selRoot!=null){
-  deleteRoot(selRoot); selRoot=activeRoot=null; redrawOverlay(); computeTraceTraits(); } });
+window.addEventListener("keydown", e => {
+  if(!traceMode) return;
+  if((e.key==="Delete"||e.key==="Backspace") && selRoot!=null){
+    deleteRoot(selRoot); selRoot=activeRoot=null; redrawOverlay(); computeTraceTraits(); }
+  else if(e.key==="Escape"){ setTraceMode(false); }
+});
 function deleteRoot(id){                                        // remove a root and its whole subtree
   const kill=new Set([id]); let grew=true;
   while(grew){ grew=false; editRoots.forEach(r=>{ if(r.parent!=null && kill.has(r.parent) && !kill.has(r.id)){ kill.add(r.id); grew=true; } }); }
